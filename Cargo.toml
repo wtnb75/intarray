@@ -1,0 +1,29 @@
+[package]
+name = "intarray"
+version = "0.1.0"
+authors = ["Takashi WATANABE <wtnb75@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = "*"
+env_logger = "*"
+log = "*"
+rand = "*"
+clap = "*"
+blake2 = "*"
+sha1 = "*"
+sha2 = "*"
+digest = "*"
+hex = "*"
+
+[dev-dependencies]
+test-env-log = "*"
+serde_json = "*"
+serde_derive = "*"
+serde_yaml = "*"
+
+[[bin]]
+name = "intarray-bench"
+path = "src/bench/main.rs"
