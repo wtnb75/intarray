@@ -3,7 +3,7 @@ extern crate log;
 
 use rand::Rng;
 use serde::ser::{Serialize, SerializeSeq, Serializer};
-use std::ops::{AddAssign, MulAssign, SubAssign};
+use std::ops::{AddAssign, MulAssign, Range, SubAssign};
 use std::{cmp, fmt, mem};
 
 /// 1-64 bits unsigned integer array
@@ -19,7 +19,7 @@ pub struct IntArray {
 /// iterator for IntArray
 pub struct IntIter<'a> {
     /// current position
-    cur: usize,
+    range: Range<usize>,
     /// refere to
     a: &'a IntArray,
 }
@@ -320,7 +320,10 @@ impl IntArray {
     }
 
     pub fn iter(&self) -> IntIter {
-        IntIter { cur: 0, a: &self }
+        IntIter {
+            range: 0..self.length,
+            a: &self,
+        }
     }
 
     pub fn capacity(&self) -> usize {
@@ -479,19 +482,7 @@ impl IntArray {
 impl<'a> Iterator for IntIter<'a> {
     type Item = u64;
     fn next(&mut self) -> Option<u64> {
-        self.cur += 1;
-        match self.a.get(self.cur - 1) {
-            Ok(n) => Some(n),
-            Err(_e) => None,
-        }
-    }
-
-    fn nth(&mut self, v: usize) -> Option<u64> {
-        self.cur += v + 1;
-        match self.a.get(self.cur - 1) {
-            Ok(n) => Some(n),
-            Err(_e) => None,
-        }
+        self.range.next().map(|i| self.a.get(i).unwrap())
     }
 
     fn count(self) -> usize {

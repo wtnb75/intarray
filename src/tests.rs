@@ -106,6 +106,16 @@ fn iterate2() {
 }
 
 #[test]
+fn iterate3() {
+    let mut v = IntArray::new(2, 3);
+    v.set(0, 0).unwrap();
+    v.set(1, 1).unwrap();
+    v.set(2, 2).unwrap();
+    let res = v.iter().collect::<Vec<u64>>();
+    assert_eq!(vec![0, 1, 2], res);
+}
+
+#[test]
 fn addsub() {
     let mut v = IntArray::new(3, 3);
     for i in 0..v.length {
