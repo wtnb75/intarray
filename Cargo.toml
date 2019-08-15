@@ -11,19 +11,16 @@ serde = "*"
 env_logger = "*"
 log = "*"
 rand = "*"
-clap = "*"
-blake2 = "*"
-sha1 = "*"
-sha2 = "*"
-digest = "*"
-hex = "*"
 
 [dev-dependencies]
 test-env-log = "*"
 serde_json = "*"
 serde_derive = "*"
 serde_yaml = "*"
+clap = "*"
+sha2 = "*"
+digest = "*"
+hex = "*"
 
-[[bin]]
-name = "intarray-bench"
-path = "src/bench/main.rs"
+[[example]]
+name = "bench"
