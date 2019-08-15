@@ -172,14 +172,7 @@ fn mul_64(a: u64, b: u64, bits: u8) -> Option<u64> {
 }
 
 fn bits(a: u64) -> usize {
-    let mut b = a;
-    for i in 0..64 {
-        if b == 0 {
-            return i;
-        }
-        b >>= 1;
-    }
-    return 64;
+    64 - a.leading_zeros() as usize
 }
 
 impl IntArray {
