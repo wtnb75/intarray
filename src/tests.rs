@@ -33,6 +33,15 @@ fn construct_withiter() {
 }
 
 #[test]
+fn construct_withiter2() {
+    let v = IntArray::new_with_iter(20, 0..(1 << 16));
+    for i in 0..v.length {
+        assert_eq!(v.get(i).unwrap(), i as u64);
+    }
+    assert_eq!(v.length, 1 << 16);
+}
+
+#[test]
 #[should_panic]
 fn construct_withvec_bad() {
     let _ = IntArray::new_with_vec(2, vec![0, 1, 2, 3, 4, 5]);
@@ -278,6 +287,8 @@ fn test_bits() {
     assert_eq!(bits(1024), 11);
     assert_eq!(bits(65535), 16);
     assert_eq!(bits(8192), 14);
+    assert_eq!(bits(0x1234_5678_9abc), 45);
+    assert_eq!(bits(0xf000_0000_0000_0000), 64);
 }
 
 #[test]
@@ -381,6 +392,23 @@ fn add64() {
 #[test]
 fn test_val2mask() {
     assert_eq!(val2mask(1, 1), 0xffff_ffff_ffff_ffff_u64);
+}
+
+#[test]
+fn zerowidth() {
+    assert_eq!(sum_64(0, 0), None);
+}
+
+#[test]
+fn add2_64_overflow() {
+    assert_eq!(add2_64(1, 1, 1), None);
+    assert_eq!(add2_64(3, 1, 2), None);
+}
+
+#[test]
+fn sub2_64_underflow() {
+    assert_eq!(sub2_64(4, 1, 1), None);
+    assert_eq!(sub2_64(0xff00, 1, 2), None);
 }
 
 /*
