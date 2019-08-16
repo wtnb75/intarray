@@ -411,6 +411,74 @@ fn sub2_64_underflow() {
     assert_eq!(sub2_64(0xff00, 1, 2), None);
 }
 
+#[test]
+fn getmask() {
+    if ELEMENT_BITS == 128 {
+        assert_eq!(
+            get_mask(1) as u128,
+            0x5555_5555_5555_5555_5555_5555_5555_5555
+        );
+        assert_eq!(
+            get_mask(2) as u128,
+            0x3333_3333_3333_3333_3333_3333_3333_3333
+        );
+        assert_eq!(
+            get_mask(24) as u128,
+            0x0000_ffffff_000000_ffffff_000000_ffffff
+        );
+        assert_eq!(
+            get_mask(32) as u128,
+            0x0000_0000_ffff_ffff_0000_0000_ffff_ffff
+        );
+        assert_eq!(
+            get_mask(48) as u128,
+            0xffff_ffff_0000_0000_0000_ffff_ffff_ffff
+        );
+        assert_eq!(get_mask(64) as u128, 0xffff_ffff_ffff_ffff);
+    }
+    if ELEMENT_BITS == 64 {
+        assert_eq!(get_mask(1) as u64, 0x5555_5555_5555_5555);
+        assert_eq!(get_mask(2) as u64, 0x3333_3333_3333_3333);
+        assert_eq!(
+            get_mask(24) as u64,
+            0b1111111111111111_000000000000000000000000_111111111111111111111111
+        );
+        assert_eq!(get_mask(32) as u64, 0xffff_ffff);
+        assert_eq!(get_mask(48) as u64, 0xffff_ffff_ffff);
+        assert_eq!(get_mask(63) as u64, 0x7fff_ffff_ffff_ffff);
+        assert_eq!(get_mask(64) as u64, 0xffff_ffff_ffff_ffff);
+    }
+    if ELEMENT_BITS == 32 {
+        assert_eq!(get_mask(1) as u32, 0x5555_5555);
+        assert_eq!(get_mask(2) as u32, 0x3333_3333);
+        assert_eq!(get_mask(24) as u32, 0b111111111111111111111111);
+        assert_eq!(get_mask(32) as u32, 0xffff_ffff);
+    }
+}
+
+#[test]
+fn element_sum() {
+    let a = 0x1234;
+    assert_eq!(a.sum_bits(1).unwrap(), 5);
+    assert_eq!(a.sum_bits(2).unwrap(), 7);
+    assert_eq!(a.sum_bits(4).unwrap(), 10);
+    assert_eq!(a.sum_bits(8).unwrap(), 70);
+}
+
+#[test]
+fn element_add() {
+    let a = 0x1234;
+    let b = 0x4321;
+    assert_eq!(a.add_bits(b, 4).unwrap(), 0x5555);
+    assert_eq!(a.add_bits(b, 8).unwrap(), 0x5555);
+
+    assert_eq!(a.addval_bits(1, 4).unwrap() & 0xffff, 0x2345);
+    assert_eq!(a.addval_bits(1, 8).unwrap() & 0xffff, 0x1335);
+
+    assert_eq!(a.addval_bits(2, 4).unwrap() & 0xffff, 0x3456);
+    assert_eq!(a.addval_bits(2, 8).unwrap() & 0xffff, 0x1436);
+}
+
 /*
     #[bench]
     fn getbench1(b: &mut Bencher) {

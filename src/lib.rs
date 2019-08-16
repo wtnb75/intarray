@@ -4,7 +4,142 @@ extern crate log;
 use rand::Rng;
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 use std::ops::{AddAssign, MulAssign, Range, SubAssign};
+use std::sync::Once;
 use std::{cmp, fmt, mem};
+
+type Element = u64;
+// type Element = u128;
+const ELEMENT_BITS: usize = mem::size_of::<Element>() * 8;
+static INIT_MASK: Once = Once::new();
+static mut MASK_ARRAY: [Element; ELEMENT_BITS / 2 - 1] = [0; ELEMENT_BITS / 2 - 1];
+
+fn init_mask_fn() {
+    unsafe {
+        for i in 1..(ELEMENT_BITS / 2) {
+            let mask0 = ((1 as Element) << i) - 1;
+            let mut mask: Element = mask0;
+            for _j in 0..(ELEMENT_BITS / (i * 2)) {
+                mask = mask.wrapping_shl(i as u32 * 2);
+                mask |= mask0;
+            }
+            MASK_ARRAY[i - 1] = mask;
+        }
+        for (i, j) in MASK_ARRAY.iter().enumerate() {
+            debug!("mask[{}+1]={:b}", i, j);
+        }
+    }
+}
+
+fn get_mask(bits: usize) -> Element {
+    INIT_MASK.call_once(|| init_mask_fn());
+    unsafe {
+        if (bits - 1) < MASK_ARRAY.len() {
+            MASK_ARRAY[bits - 1]
+        } else if bits == ELEMENT_BITS {
+            !0
+        } else {
+            ((1 as Element) << bits) - 1
+        }
+    }
+}
+
+fn get_masks(bits: usize) -> (Element, Element) {
+    let res = get_mask(bits);
+    (res, res.wrapping_shl(bits as u32))
+}
+
+trait ElementTrait {
+    type E;
+
+    // utility
+    fn val_expand(v: Self::E, bits: usize) -> Self::E;
+
+    // a1+a2+a3+...
+    fn sum_bits(self, bits: usize) -> Option<Self::E>;
+
+    // (a1 OP b1), (a2 OP b2), (a3 OP b3),...
+    fn add_bits(self, b: Self::E, bits: usize) -> Option<Self::E>;
+    fn sub_bits(self, b: Self::E, bits: usize) -> Option<Self::E>;
+
+    // (a1 OP b), (a2 OP b), (a3 OP b),...
+    fn addval_bits(self, b: Self::E, bits: usize) -> Option<Self::E>;
+    fn subval_bits(self, b: Self::E, bits: usize) -> Option<Self::E>;
+    fn mulval_bits(self, b: Self::E, bits: usize) -> Option<Self::E>;
+
+    fn ffs(self) -> usize;
+}
+
+impl ElementTrait for Element {
+    type E = Element;
+
+    fn val_expand(v: Self::E, bits: usize) -> Self::E {
+        let mut v1: Self::E = 0;
+        for _ in 0..(ELEMENT_BITS / bits) {
+            v1 <<= bits;
+            v1 |= v;
+        }
+        v1
+    }
+
+    fn sum_bits(self, bits: usize) -> Option<Self::E> {
+        if bits >= ELEMENT_BITS {
+            debug!("return self: {}, bits={}", self, bits);
+            return Some(self);
+        }
+        if bits == 0 {
+            error!("invalid argument: bits={}", bits);
+            return None;
+        }
+        let mask = get_mask(bits);
+        let res = (self & mask) + ((self >> bits) & mask);
+        res.sum_bits(bits * 2)
+    }
+
+    fn add_bits(self, b: Self::E, bits: usize) -> Option<Self::E> {
+        let (mask1, mask2) = get_masks(bits);
+        let r1 = (self & mask1) + (b & mask1);
+        let r2 = (self & mask2) + (b & mask2);
+        if (r1 & mask2) != 0 || (r2 & mask1) != 0 {
+            None
+        } else {
+            Some(r1 + r2)
+        }
+    }
+
+    fn sub_bits(self, b: Self::E, bits: usize) -> Option<Self::E> {
+        let (mask1, mask2) = get_masks(bits);
+        let r1 = (self & mask1) - (b & mask1);
+        let r2 = (self & mask2) - (b & mask2);
+        if (r1 & mask2) != 0 || (r2 & mask1) != 0 {
+            None
+        } else {
+            Some(r1 + r2)
+        }
+    }
+
+    fn mulval_bits(self, b: Self::E, bits: usize) -> Option<Self::E> {
+        let (mask1, mask2) = get_masks(bits);
+        let r1 = (self & mask1) * b;
+        let r2 = (self & mask2) * b;
+        if (r1 & mask2) != 0 || (r2 & mask1) != 0 {
+            None
+        } else {
+            Some(r1 + r2)
+        }
+    }
+
+    fn addval_bits(self, b: Self::E, bits: usize) -> Option<Self::E> {
+        self.add_bits(Self::val_expand(b, bits), bits)
+    }
+
+    fn subval_bits(self, b: Self::E, bits: usize) -> Option<Self::E> {
+        self.sub_bits(Self::val_expand(b, bits), bits)
+    }
+
+    fn ffs(self) -> usize {
+        ELEMENT_BITS - self.leading_zeros() as usize
+    }
+}
 
 /// 1-64 bits unsigned integer array
 pub struct IntArray {
