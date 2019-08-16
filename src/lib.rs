@@ -484,7 +484,7 @@ impl<'a> Iterator for IntIter<'a> {
 
 impl fmt::Display for IntArray {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}[{}]=", self.bits, self.capacity()).unwrap();
+        write!(f, "{}[{}]=", self.bits, self.length).unwrap();
         write!(
             f,
             "{}",
@@ -509,15 +509,18 @@ impl Serialize for IntArray {
     }
 }
 
-impl AddAssign<u64> for IntArray {
+impl AddAssign<Element> for IntArray {
     fn add_assign(&mut self, v: Element) {
         let (bpd, _) = IntArray::sizeval(self.bits, 0);
+        debug!("length={}, bits={}, bpd={}", self.length, self.bits, bpd);
         for i in 0..(self.length / bpd) {
+            debug!("i={}, v={}", i, v);
             self.data[i] = self.data[i].addval_bits(v, self.bits).unwrap();
         }
         if self.length % bpd != 0 {
             let i = self.length / bpd;
-            let mask = ((1 as Element) << (bpd * (self.length % bpd))) - 1;
+            let mask = ((1 as Element) << (self.bits * (self.length % bpd))) - 1;
+            debug!("mask={:x} ({} bits)", mask, mask.ffs());
             self.data[i] = self.data[i].addval_bits(v, self.bits).unwrap() & mask;
         }
     }
@@ -534,7 +537,7 @@ impl AddAssign<IntArray> for IntArray {
             }
             if self.length % bpd != 0 {
                 let i = self.length / bpd;
-                let mask = ((1 as Element) << (bpd * (self.length % bpd))) - 1;
+                let mask = ((1 as Element) << (self.bits * (self.length % bpd))) - 1;
                 self.data[i] = self.data[i].add_bits(v.data[i], self.bits).unwrap() & mask;
             }
             return;
@@ -559,7 +562,7 @@ impl SubAssign<Element> for IntArray {
         }
         if self.length % bpd != 0 {
             let i = self.length / bpd;
-            let mask = ((1 as Element) << (bpd * (self.length % bpd))) - 1;
+            let mask = ((1 as Element) << (self.bits * (self.length % bpd))) - 1;
             self.data[i] = (self.data[i] | (!mask)).subval_bits(v, self.bits).unwrap() & mask;
         }
     }
@@ -576,7 +579,7 @@ impl SubAssign<IntArray> for IntArray {
             }
             if self.length % bpd != 0 {
                 let i = self.length / bpd;
-                let mask = ((1 as Element) << (bpd * (self.length % bpd))) - 1;
+                let mask = ((1 as Element) << (self.bits * (self.length % bpd))) - 1;
                 self.data[i] = (self.data[i] | (!mask))
                     .sub_bits(v.data[i], self.bits)
                     .unwrap()
@@ -595,7 +598,7 @@ impl SubAssign<IntArray> for IntArray {
     }
 }
 
-impl MulAssign<u64> for IntArray {
+impl MulAssign<Element> for IntArray {
     fn mul_assign(&mut self, v: Element) {
         let (bpd, _) = IntArray::sizeval(self.bits, 0);
         for i in 0..(self.length / bpd) {
@@ -603,7 +606,7 @@ impl MulAssign<u64> for IntArray {
         }
         if self.length % bpd != 0 {
             let i = self.length / bpd;
-            let mask = ((1 as Element) << (bpd * (self.length % bpd))) - 1;
+            let mask = ((1 as Element) << (self.bits * (self.length % bpd))) - 1;
             self.data[i] = (self.data[i] & mask).mulval_bits(v, self.bits).unwrap() & mask;
         }
     }

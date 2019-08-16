@@ -36,7 +36,7 @@ fn construct_withiter() {
 fn construct_withiter2() {
     let v = IntArray::new_with_iter(20, 0..(1 << 16));
     for i in 0..v.length {
-        assert_eq!(v.get(i).unwrap(), i as u64);
+        assert_eq!(v.get(i).unwrap(), i as Element);
     }
     assert_eq!(v.length, 1 << 16);
 }
@@ -53,7 +53,7 @@ fn modify() {
     v.set(3, 1).unwrap();
     v.set(6, 2).unwrap();
     v.set(9, 3).unwrap();
-    assert_eq!(v.to_string(), "2[32]=0,0,0,1,0,0,2,0,0,3".to_string())
+    assert_eq!(v.to_string(), "2[10]=0,0,0,1,0,0,2,0,0,3".to_string())
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn extend() {
     let mut v = IntArray::new(2, 3);
     v.resize(10);
     v.set(3, 1).unwrap();
-    assert_eq!(v.to_string(), "2[32]=0,0,0,1,0,0,0,0,0,0".to_string())
+    assert_eq!(v.to_string(), "2[10]=0,0,0,1,0,0,0,0,0,0".to_string())
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn iterate3() {
     v.set(0, 0).unwrap();
     v.set(1, 1).unwrap();
     v.set(2, 2).unwrap();
-    let res = v.iter().collect::<Vec<u64>>();
+    let res = v.iter().collect::<Vec<Element>>();
     assert_eq!(vec![0, 1, 2], res);
 }
 
@@ -130,17 +130,17 @@ fn addsub() {
     for i in 0..v.length {
         v.incr(i).unwrap();
     }
-    assert_eq!(v.to_string(), "3[21]=1,1,1".to_string());
+    assert_eq!(v.to_string(), "3[3]=1,1,1".to_string());
 
     for i in 0..v.length {
-        v.add(i, i as u64).unwrap();
+        v.add(i, i as Element).unwrap();
     }
-    assert_eq!(v.to_string(), "3[21]=1,2,3".to_string());
+    assert_eq!(v.to_string(), "3[3]=1,2,3".to_string());
 
     for i in 0..v.length {
         v.decr(i).unwrap();
     }
-    assert_eq!(v.to_string(), "3[21]=0,1,2".to_string());
+    assert_eq!(v.to_string(), "3[3]=0,1,2".to_string());
 }
 
 #[test]
@@ -149,11 +149,11 @@ fn sum_1() {
     for i in 0..v.length {
         v.incr(i).unwrap();
     }
-    assert_eq!(v.sum0().unwrap(), v.length as u64);
-    assert_eq!(v.sum().unwrap(), v.length as u64);
+    assert_eq!(v.sum0().unwrap(), v.length as Element);
+    assert_eq!(v.sum().unwrap(), v.length as Element);
 
     for i in 0..v.length {
-        v.add(i, i as u64).unwrap();
+        v.add(i, i as Element).unwrap();
     }
     assert_eq!(v.sum(), v.sum0());
 
@@ -325,16 +325,16 @@ fn shape() {
 #[test]
 fn assign_int() {
     let mut v1 = IntArray::new_with_vec(10, vec![0, 1, 2, 0, 1, 2, 3]);
+    assert_eq!(v1.to_string(), "10[7]=0,1,2,0,1,2,3");
     v1 += 10;
-    assert_eq!(v1.get(0).unwrap(), 10);
-    assert_eq!(v1.get(2).unwrap(), 12);
+    assert_eq!(v1.to_string(), "10[7]=10,11,12,10,11,12,13");
     v1 -= 5;
-    assert_eq!(v1.get(1).unwrap(), 6);
-    assert_eq!(v1.get(3).unwrap(), 5);
+    assert_eq!(v1.to_string(), "10[7]=5,6,7,5,6,7,8");
     v1.resize(10);
-    println!("v1={}", v1);
+    assert_eq!(v1.to_string(), "10[10]=5,6,7,5,6,7,8,0,0,0");
     assert_eq!(v1.sum().unwrap(), 44);
     v1 *= 3;
+    assert_eq!(v1.to_string(), "10[10]=15,18,21,15,18,21,24,0,0,0");
     assert_eq!(v1.sum().unwrap(), 44 * 3);
 }
 
