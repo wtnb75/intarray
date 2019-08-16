@@ -225,7 +225,7 @@ fn u64test() {
 #[test]
 fn sumx() {
     let mut rng = rand::thread_rng();
-    let bits: u8 = rng.gen_range(1, 20);
+    let bits: usize = rng.gen_range(1, 20);
     let entries: usize = rng.gen_range(1 * 1024 * 1024, (64 / bits as usize) * 1024 * 1024);
     let mut v = IntArray::new(bits, entries);
     let maxv = v.max_value();
@@ -280,15 +280,15 @@ fn limit_incdec() {
 
 #[test]
 fn test_bits() {
-    assert_eq!(bits(0), 0);
-    assert_eq!(bits(1), 1);
-    assert_eq!(bits(5), 3);
-    assert_eq!(bits(1023), 10);
-    assert_eq!(bits(1024), 11);
-    assert_eq!(bits(65535), 16);
-    assert_eq!(bits(8192), 14);
-    assert_eq!(bits(0x1234_5678_9abc), 45);
-    assert_eq!(bits(0xf000_0000_0000_0000), 64);
+    assert_eq!(0.ffs(), 0);
+    assert_eq!(1.ffs(), 1);
+    assert_eq!(5.ffs(), 3);
+    assert_eq!(1023.ffs(), 10);
+    assert_eq!(1024.ffs(), 11);
+    assert_eq!(65535.ffs(), 16);
+    assert_eq!(8192.ffs(), 14);
+    assert_eq!(0x1234_5678_9abc.ffs(), 45);
+    assert_eq!(0xf000_0000_0000_0000.ffs(), 64);
 }
 
 #[test]
@@ -384,31 +384,26 @@ fn test_subarray() {
 
 #[test]
 fn add64() {
-    let v1 = 0x1234_5678_90ab_cdef_u64;
+    let v1 = 0x1234_5678_90ab_cdef;
     let v2 = 2;
-    println!("v={}", add_64(v1, v2, 8).unwrap());
-}
-
-#[test]
-fn test_val2mask() {
-    assert_eq!(val2mask(1, 1), 0xffff_ffff_ffff_ffff_u64);
+    println!("v={}", v1.addval_bits(v2, 8).unwrap());
 }
 
 #[test]
 fn zerowidth() {
-    assert_eq!(sum_64(0, 0), None);
+    assert_eq!(0.subval_bits(0, 0), None);
 }
 
 #[test]
 fn add2_64_overflow() {
-    assert_eq!(add2_64(1, 1, 1), None);
-    assert_eq!(add2_64(3, 1, 2), None);
+    assert_eq!(1.addval_bits(1, 1), None);
+    assert_eq!(3.addval_bits(1, 2), None);
 }
 
 #[test]
 fn sub2_64_underflow() {
-    assert_eq!(sub2_64(4, 1, 1), None);
-    assert_eq!(sub2_64(0xff00, 1, 2), None);
+    assert_eq!(4.subval_bits(1, 1), None);
+    assert_eq!(0xff00.subval_bits(1, 2), None);
 }
 
 #[test]
