@@ -34,9 +34,9 @@ fn main() {
         )
         .arg(Arg::with_name("count"));
     let matches = app.get_matches();
-    let mut bits: u8 = 0;
+    let mut bits: usize = 0;
     if let Some(o) = matches.value_of("bits") {
-        bits = o.parse::<u8>().unwrap();
+        bits = o.parse::<usize>().unwrap();
         println!("{} bits", bits);
         assert!(bits != 0, "0 bits");
     }

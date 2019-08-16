@@ -36,7 +36,7 @@ fn construct_withiter() {
 fn construct_withiter2() {
     let v = IntArray::new_with_iter(20, 0..(1 << 16));
     for i in 0..v.length {
-        assert_eq!(v.get(i).unwrap(), i as u64);
+        assert_eq!(v.get(i).unwrap(), i as Element);
     }
     assert_eq!(v.length, 1 << 16);
 }
@@ -53,7 +53,7 @@ fn modify() {
     v.set(3, 1).unwrap();
     v.set(6, 2).unwrap();
     v.set(9, 3).unwrap();
-    assert_eq!(v.to_string(), "2[32]=0,0,0,1,0,0,2,0,0,3".to_string())
+    assert_eq!(v.to_string(), "2[10]=0,0,0,1,0,0,2,0,0,3".to_string())
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn extend() {
     let mut v = IntArray::new(2, 3);
     v.resize(10);
     v.set(3, 1).unwrap();
-    assert_eq!(v.to_string(), "2[32]=0,0,0,1,0,0,0,0,0,0".to_string())
+    assert_eq!(v.to_string(), "2[10]=0,0,0,1,0,0,0,0,0,0".to_string())
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn iterate3() {
     v.set(0, 0).unwrap();
     v.set(1, 1).unwrap();
     v.set(2, 2).unwrap();
-    let res = v.iter().collect::<Vec<u64>>();
+    let res = v.iter().collect::<Vec<Element>>();
     assert_eq!(vec![0, 1, 2], res);
 }
 
@@ -130,17 +130,17 @@ fn addsub() {
     for i in 0..v.length {
         v.incr(i).unwrap();
     }
-    assert_eq!(v.to_string(), "3[21]=1,1,1".to_string());
+    assert_eq!(v.to_string(), "3[3]=1,1,1".to_string());
 
     for i in 0..v.length {
-        v.add(i, i as u64).unwrap();
+        v.add(i, i as Element).unwrap();
     }
-    assert_eq!(v.to_string(), "3[21]=1,2,3".to_string());
+    assert_eq!(v.to_string(), "3[3]=1,2,3".to_string());
 
     for i in 0..v.length {
         v.decr(i).unwrap();
     }
-    assert_eq!(v.to_string(), "3[21]=0,1,2".to_string());
+    assert_eq!(v.to_string(), "3[3]=0,1,2".to_string());
 }
 
 #[test]
@@ -149,11 +149,11 @@ fn sum_1() {
     for i in 0..v.length {
         v.incr(i).unwrap();
     }
-    assert_eq!(v.sum0().unwrap(), v.length as u64);
-    assert_eq!(v.sum().unwrap(), v.length as u64);
+    assert_eq!(v.sum0().unwrap(), v.length as Element);
+    assert_eq!(v.sum().unwrap(), v.length as Element);
 
     for i in 0..v.length {
-        v.add(i, i as u64).unwrap();
+        v.add(i, i as Element).unwrap();
     }
     assert_eq!(v.sum(), v.sum0());
 
@@ -225,7 +225,7 @@ fn u64test() {
 #[test]
 fn sumx() {
     let mut rng = rand::thread_rng();
-    let bits: u8 = rng.gen_range(1, 20);
+    let bits: usize = rng.gen_range(1, 20);
     let entries: usize = rng.gen_range(1 * 1024 * 1024, (64 / bits as usize) * 1024 * 1024);
     let mut v = IntArray::new(bits, entries);
     let maxv = v.max_value();
@@ -280,15 +280,15 @@ fn limit_incdec() {
 
 #[test]
 fn test_bits() {
-    assert_eq!(bits(0), 0);
-    assert_eq!(bits(1), 1);
-    assert_eq!(bits(5), 3);
-    assert_eq!(bits(1023), 10);
-    assert_eq!(bits(1024), 11);
-    assert_eq!(bits(65535), 16);
-    assert_eq!(bits(8192), 14);
-    assert_eq!(bits(0x1234_5678_9abc), 45);
-    assert_eq!(bits(0xf000_0000_0000_0000), 64);
+    assert_eq!(0.ffs(), 0);
+    assert_eq!(1.ffs(), 1);
+    assert_eq!(5.ffs(), 3);
+    assert_eq!(1023.ffs(), 10);
+    assert_eq!(1024.ffs(), 11);
+    assert_eq!(65535.ffs(), 16);
+    assert_eq!(8192.ffs(), 14);
+    assert_eq!(0x1234_5678_9abc.ffs(), 45);
+    assert_eq!(0xf000_0000_0000_0000.ffs(), 64);
 }
 
 #[test]
@@ -325,16 +325,16 @@ fn shape() {
 #[test]
 fn assign_int() {
     let mut v1 = IntArray::new_with_vec(10, vec![0, 1, 2, 0, 1, 2, 3]);
+    assert_eq!(v1.to_string(), "10[7]=0,1,2,0,1,2,3");
     v1 += 10;
-    assert_eq!(v1.get(0).unwrap(), 10);
-    assert_eq!(v1.get(2).unwrap(), 12);
+    assert_eq!(v1.to_string(), "10[7]=10,11,12,10,11,12,13");
     v1 -= 5;
-    assert_eq!(v1.get(1).unwrap(), 6);
-    assert_eq!(v1.get(3).unwrap(), 5);
+    assert_eq!(v1.to_string(), "10[7]=5,6,7,5,6,7,8");
     v1.resize(10);
-    println!("v1={}", v1);
+    assert_eq!(v1.to_string(), "10[10]=5,6,7,5,6,7,8,0,0,0");
     assert_eq!(v1.sum().unwrap(), 44);
     v1 *= 3;
+    assert_eq!(v1.to_string(), "10[10]=15,18,21,15,18,21,24,0,0,0");
     assert_eq!(v1.sum().unwrap(), 44 * 3);
 }
 
@@ -384,31 +384,94 @@ fn test_subarray() {
 
 #[test]
 fn add64() {
-    let v1 = 0x1234_5678_90ab_cdef_u64;
+    let v1 = 0x1234_5678_90ab_cdef;
     let v2 = 2;
-    println!("v={}", add_64(v1, v2, 8).unwrap());
-}
-
-#[test]
-fn test_val2mask() {
-    assert_eq!(val2mask(1, 1), 0xffff_ffff_ffff_ffff_u64);
+    println!("v={}", v1.addval_bits(v2, 8).unwrap());
 }
 
 #[test]
 fn zerowidth() {
-    assert_eq!(sum_64(0, 0), None);
+    assert_eq!(0.subval_bits(0, 0), None);
 }
 
 #[test]
 fn add2_64_overflow() {
-    assert_eq!(add2_64(1, 1, 1), None);
-    assert_eq!(add2_64(3, 1, 2), None);
+    assert_eq!(1.addval_bits(1, 1), None);
+    assert_eq!(3.addval_bits(1, 2), None);
 }
 
 #[test]
 fn sub2_64_underflow() {
-    assert_eq!(sub2_64(4, 1, 1), None);
-    assert_eq!(sub2_64(0xff00, 1, 2), None);
+    assert_eq!(4.subval_bits(1, 1), None);
+    assert_eq!(0xff00.subval_bits(1, 2), None);
+}
+
+#[test]
+fn getmask() {
+    if ELEMENT_BITS == 128 {
+        assert_eq!(
+            get_mask(1) as u128,
+            0x5555_5555_5555_5555_5555_5555_5555_5555
+        );
+        assert_eq!(
+            get_mask(2) as u128,
+            0x3333_3333_3333_3333_3333_3333_3333_3333
+        );
+        assert_eq!(
+            get_mask(24) as u128,
+            0x0000_ffffff_000000_ffffff_000000_ffffff
+        );
+        assert_eq!(
+            get_mask(32) as u128,
+            0x0000_0000_ffff_ffff_0000_0000_ffff_ffff
+        );
+        assert_eq!(
+            get_mask(48) as u128,
+            0xffff_ffff_0000_0000_0000_ffff_ffff_ffff
+        );
+        assert_eq!(get_mask(64) as u128, 0xffff_ffff_ffff_ffff);
+    }
+    if ELEMENT_BITS == 64 {
+        assert_eq!(get_mask(1) as u64, 0x5555_5555_5555_5555);
+        assert_eq!(get_mask(2) as u64, 0x3333_3333_3333_3333);
+        assert_eq!(
+            get_mask(24) as u64,
+            0b1111111111111111_000000000000000000000000_111111111111111111111111
+        );
+        assert_eq!(get_mask(32) as u64, 0xffff_ffff);
+        assert_eq!(get_mask(48) as u64, 0xffff_ffff_ffff);
+        assert_eq!(get_mask(63) as u64, 0x7fff_ffff_ffff_ffff);
+        assert_eq!(get_mask(64) as u64, 0xffff_ffff_ffff_ffff);
+    }
+    if ELEMENT_BITS == 32 {
+        assert_eq!(get_mask(1) as u32, 0x5555_5555);
+        assert_eq!(get_mask(2) as u32, 0x3333_3333);
+        assert_eq!(get_mask(24) as u32, 0b111111111111111111111111);
+        assert_eq!(get_mask(32) as u32, 0xffff_ffff);
+    }
+}
+
+#[test]
+fn element_sum() {
+    let a = 0x1234;
+    assert_eq!(a.sum_bits(1).unwrap(), 5);
+    assert_eq!(a.sum_bits(2).unwrap(), 7);
+    assert_eq!(a.sum_bits(4).unwrap(), 10);
+    assert_eq!(a.sum_bits(8).unwrap(), 70);
+}
+
+#[test]
+fn element_add() {
+    let a = 0x1234;
+    let b = 0x4321;
+    assert_eq!(a.add_bits(b, 4).unwrap(), 0x5555);
+    assert_eq!(a.add_bits(b, 8).unwrap(), 0x5555);
+
+    assert_eq!(a.addval_bits(1, 4).unwrap() & 0xffff, 0x2345);
+    assert_eq!(a.addval_bits(1, 8).unwrap() & 0xffff, 0x1335);
+
+    assert_eq!(a.addval_bits(2, 4).unwrap() & 0xffff, 0x3456);
+    assert_eq!(a.addval_bits(2, 8).unwrap() & 0xffff, 0x1436);
 }
 
 /*
