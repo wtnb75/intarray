@@ -596,7 +596,7 @@ impl SubAssign<IntArray> for IntArray {
 }
 
 impl MulAssign<u64> for IntArray {
-    fn mul_assign(&mut self, v: u64) {
+    fn mul_assign(&mut self, v: Element) {
         let (bpd, _) = IntArray::sizeval(self.bits, 0);
         for i in 0..(self.length / bpd) {
             self.data[i] = self.data[i].mulval_bits(v, self.bits).unwrap();
