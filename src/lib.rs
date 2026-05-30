@@ -198,7 +198,7 @@ impl IntArray {
             b
         );
         let bpd = ELEMENT_BITS / b;
-        (bpd, (len + bpd - 1) / bpd)
+        (bpd, len.div_ceil(bpd))
     }
     pub fn new(b: usize, len: usize) -> IntArray {
         let (bpd, cap) = IntArray::sizeval(b, len);
@@ -206,7 +206,7 @@ impl IntArray {
         IntArray {
             bits: b,
             length: len,
-            data: vec![0; cap as usize],
+            data: vec![0; cap],
         }
     }
 
@@ -224,7 +224,7 @@ impl IntArray {
         res
     }
 
-    pub fn new_with_iter<'a, I>(b: usize, vals: I) -> IntArray
+    pub fn new_with_iter<I>(b: usize, vals: I) -> IntArray
     where
         I: Iterator<Item = Element>,
     {
@@ -235,7 +235,7 @@ impl IntArray {
         let mut res = IntArray {
             bits: b,
             length: UNIT,
-            data: vec![0; cap as usize],
+            data: vec![0; cap],
         };
         for v in vals {
             if cnt >= res.length {
@@ -249,17 +249,17 @@ impl IntArray {
         res
     }
 
-    pub fn subarray<'a>(&'a self, offset: usize, length: usize) -> IntArray {
+    pub fn subarray(&self, offset: usize, length: usize) -> IntArray {
         let mut res = IntArray::new(self.bits, length);
         let (bpd, _) = IntArray::sizeval(self.bits, 0);
-        if offset % bpd == 0 {
+        if offset.is_multiple_of(bpd) {
             // fast path
             debug!("fast path: offset={}, length={}", offset, length);
             for i in 0..(length / bpd) {
                 res.data[i] = self.data[offset / bpd + i];
             }
             // rest
-            if length % bpd != 0 {
+            if !length.is_multiple_of(bpd) {
                 let i = length / bpd;
                 let mask = ((1 as Element) << (self.bits * (length % bpd))) - 1;
                 res.data[i] = self.data[offset / bpd + i] & mask;
@@ -297,7 +297,7 @@ impl IntArray {
 
     pub fn extend_array(&mut self, vals: IntArray) {
         let (bpd, _) = IntArray::sizeval(self.bits, 0);
-        if vals.bits == self.bits && self.length % bpd == 0 {
+        if vals.bits == self.bits && self.length.is_multiple_of(bpd) {
             // fast path: self is word-aligned, so vals.data slots directly follow
             debug!("fast path: bits={}, length={}", self.bits, self.length);
             self.length += vals.length;
@@ -313,7 +313,7 @@ impl IntArray {
         self.extend_array(vals);
     }
 
-    pub fn shape<'a>(self: &'a IntArray, bits: usize) -> IntArray {
+    pub fn shape(self: &IntArray, bits: usize) -> IntArray {
         IntArray::new_with_iter(bits, self.iter())
     }
 
@@ -341,7 +341,7 @@ impl IntArray {
     pub fn iter(&self) -> IntIter<'_> {
         IntIter {
             range: 0..self.length,
-            a: &self,
+            a: self,
         }
     }
 
@@ -352,13 +352,17 @@ impl IntArray {
 
     pub fn resize(&mut self, len: usize) {
         let bpd = ELEMENT_BITS / self.bits;
-        let cap = (len + bpd - 1) / bpd;
+        let cap = len.div_ceil(bpd);
         self.length = len;
         self.data.resize(cap, 0);
     }
 
     pub fn len(&self) -> usize {
         self.length
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.length == 0
     }
 
     pub fn max_value(&self) -> Element {
@@ -384,8 +388,8 @@ impl IntArray {
     }
 
     fn getoffset(&self, i: usize) -> (usize, usize, usize) {
-        let bpd = ELEMENT_BITS / self.bits as usize;
-        return (bpd, i / bpd, i % bpd);
+        let bpd = ELEMENT_BITS / self.bits;
+        (bpd, i / bpd, i % bpd)
     }
 
     pub fn get(&self, i: usize) -> Result<Element, IntArrayError> {
@@ -394,7 +398,7 @@ impl IntArray {
         }
         let (_, idx, iv) = self.getoffset(i);
         let vv = self.data[idx];
-        let res = (vv >> (iv * self.bits as usize)) & self.max_value();
+        let res = (vv >> (iv * self.bits)) & self.max_value();
         Ok(res)
     }
 
@@ -460,7 +464,7 @@ impl IntArray {
         self.sub(i, 1)
     }
 
-    pub fn sum<'a>(&'a self) -> Option<Element> {
+    pub fn sum(&self) -> Option<Element> {
         let mut res = 0;
         if self.bits > ELEMENT_BITS / 2 {
             return self.sum0();
@@ -472,8 +476,8 @@ impl IntArray {
         Some(res)
     }
 
-    pub fn sum0<'a>(&'a self) -> Option<Element> {
-        return Some(self.iter().fold(0 as Element, |sum, a| sum + a));
+    pub fn sum0(&self) -> Option<Element> {
+        Some(self.iter().fold(0 as Element, |sum, a| sum + a))
     }
 
     pub fn fill_random(&mut self) {
@@ -481,7 +485,7 @@ impl IntArray {
             return;
         }
         let mut rng = rand::thread_rng();
-        if ELEMENT_BITS % self.bits == 0 {
+        if ELEMENT_BITS.is_multiple_of(self.bits) {
             for i in 0..(self.data.len() - 1) {
                 self.data[i] = rng.gen();
             }
@@ -545,7 +549,7 @@ impl AddAssign<Element> for IntArray {
             debug!("i={}, v={}", i, v);
             self.data[i] = self.data[i].addval_bits(v, self.bits).unwrap();
         }
-        if self.length % bpd != 0 {
+        if !self.length.is_multiple_of(bpd) {
             let i = self.length / bpd;
             let mask = ((1 as Element) << (self.bits * (self.length % bpd))) - 1;
             debug!("mask={:x} ({} bits)", mask, mask.ffs());
@@ -563,7 +567,7 @@ impl AddAssign<IntArray> for IntArray {
             for i in 0..(self.length / bpd) {
                 self.data[i] = self.data[i].add_bits(v.data[i], self.bits).unwrap();
             }
-            if self.length % bpd != 0 {
+            if !self.length.is_multiple_of(bpd) {
                 let i = self.length / bpd;
                 let mask = ((1 as Element) << (self.bits * (self.length % bpd))) - 1;
                 self.data[i] = self.data[i].add_bits(v.data[i], self.bits).unwrap() & mask;
@@ -588,7 +592,7 @@ impl SubAssign<Element> for IntArray {
         for i in 0..(self.length / bpd) {
             self.data[i] = self.data[i].subval_bits(v, self.bits).unwrap();
         }
-        if self.length % bpd != 0 {
+        if !self.length.is_multiple_of(bpd) {
             let i = self.length / bpd;
             let mask = ((1 as Element) << (self.bits * (self.length % bpd))) - 1;
             self.data[i] = (self.data[i] | (!mask)).subval_bits(v, self.bits).unwrap() & mask;
@@ -605,7 +609,7 @@ impl SubAssign<IntArray> for IntArray {
             for i in 0..(self.length / bpd) {
                 self.data[i] = self.data[i].sub_bits(v.data[i], self.bits).unwrap();
             }
-            if self.length % bpd != 0 {
+            if !self.length.is_multiple_of(bpd) {
                 let i = self.length / bpd;
                 let mask = ((1 as Element) << (self.bits * (self.length % bpd))) - 1;
                 self.data[i] = (self.data[i] | (!mask))
@@ -632,7 +636,7 @@ impl MulAssign<Element> for IntArray {
         for i in 0..(self.length / bpd) {
             self.data[i] = self.data[i].mulval_bits(v, self.bits).unwrap();
         }
-        if self.length % bpd != 0 {
+        if !self.length.is_multiple_of(bpd) {
             let i = self.length / bpd;
             let mask = ((1 as Element) << (self.bits * (self.length % bpd))) - 1;
             self.data[i] = (self.data[i] & mask).mulval_bits(v, self.bits).unwrap() & mask;
