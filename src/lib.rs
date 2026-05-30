@@ -2,42 +2,39 @@ use log::{debug, error};
 use rand::Rng;
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 use std::ops::{AddAssign, MulAssign, Range, SubAssign};
-use std::sync::Once;
+use std::sync::OnceLock;
 use std::{cmp, fmt, mem};
 
 type Element = u64;
 // type Element = u128;
 const ELEMENT_BITS: usize = mem::size_of::<Element>() * 8;
-static INIT_MASK: Once = Once::new();
-static mut MASK_ARRAY: [Element; ELEMENT_BITS / 2 - 1] = [0; ELEMENT_BITS / 2 - 1];
+static MASK_ARRAY: OnceLock<[Element; ELEMENT_BITS / 2 - 1]> = OnceLock::new();
 
-fn init_mask_fn() {
-    unsafe {
-        for i in 1..(ELEMENT_BITS / 2) {
-            let mask0 = ((1 as Element) << i) - 1;
-            let mut mask: Element = mask0;
-            for _j in 0..(ELEMENT_BITS / (i * 2)) {
-                mask = mask.wrapping_shl(i as u32 * 2);
-                mask |= mask0;
-            }
-            MASK_ARRAY[i - 1] = mask;
+fn init_mask_array() -> [Element; ELEMENT_BITS / 2 - 1] {
+    let mut arr = [0; ELEMENT_BITS / 2 - 1];
+    for i in 1..(ELEMENT_BITS / 2) {
+        let mask0 = ((1 as Element) << i) - 1;
+        let mut mask: Element = mask0;
+        for _j in 0..(ELEMENT_BITS / (i * 2)) {
+            mask = mask.wrapping_shl(i as u32 * 2);
+            mask |= mask0;
         }
-        for (i, j) in MASK_ARRAY.iter().enumerate() {
-            debug!("mask[{}+1]={:b}", i, j);
-        }
+        arr[i - 1] = mask;
     }
+    for (i, j) in arr.iter().enumerate() {
+        debug!("mask[{}+1]={:b}", i, j);
+    }
+    arr
 }
 
 fn get_mask(bits: usize) -> Element {
-    INIT_MASK.call_once(|| init_mask_fn());
-    unsafe {
-        if (bits - 1) < MASK_ARRAY.len() {
-            MASK_ARRAY[bits - 1]
-        } else if bits == ELEMENT_BITS {
-            !0
-        } else {
-            ((1 as Element) << bits) - 1
-        }
+    let arr = MASK_ARRAY.get_or_init(init_mask_array);
+    if (bits - 1) < arr.len() {
+        arr[bits - 1]
+    } else if bits == ELEMENT_BITS {
+        !0
+    } else {
+        ((1 as Element) << bits) - 1
     }
 }
 
@@ -174,8 +171,14 @@ pub struct IntIter<'a> {
 
 impl IntArray {
     fn sizeval(b: usize, len: usize) -> (usize, usize) {
+        assert!(
+            b > 0 && b <= ELEMENT_BITS,
+            "bits must be in 1..={}, got {}",
+            ELEMENT_BITS,
+            b
+        );
         let bpd = ELEMENT_BITS / b;
-        return (bpd, (len + bpd - 1) / bpd);
+        (bpd, (len + bpd - 1) / bpd)
     }
     pub fn new(b: usize, len: usize) -> IntArray {
         let (bpd, cap) = IntArray::sizeval(b, len);
@@ -315,7 +318,7 @@ impl IntArray {
         res
     }
 
-    pub fn iter(&self) -> IntIter {
+    pub fn iter(&self) -> IntIter<'_> {
         IntIter {
             range: 0..self.length,
             a: &self,
