@@ -3,6 +3,7 @@ name = "intarray"
 version = "0.1.0"
 authors = ["Takashi WATANABE <wtnb75@gmail.com>"]
 edition = "2021"
+rust-version = "1.87"
 repository = "https://github.com/wtnb75/intarray"
 keywords = ["array", "memory"]
 license-file = "LICENSE"
