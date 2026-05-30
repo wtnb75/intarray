@@ -283,39 +283,53 @@ impl IntArray {
         mem::size_of::<IntArray>() + (ELEMENT_BITS / 8) * self.data.capacity()
     }
 
-    pub fn push(&mut self, v: Element) -> Option<usize> {
+    /// # Errors
+    /// Returns `Err(TooLarge)` if `v` exceeds the maximum value for this array's bit width.
+    /// The array length is unchanged on error.
+    pub fn push(&mut self, v: Element) -> Result<usize, IntArrayError> {
         self.resize(self.length + 1);
         match self.set(self.length - 1, v) {
-            Ok(_) => Some(self.length - 1),
-            Err(_) => None,
+            Ok(_) => Ok(self.length - 1),
+            Err(e) => {
+                self.resize(self.length - 1);
+                Err(e)
+            }
         }
     }
 
-    pub fn extend<I>(&mut self, vals: I)
+    /// # Errors
+    /// Returns `Err(TooLarge)` if any value exceeds the bit-width maximum.
+    /// The array is unchanged on error (atomic: either all elements are inserted or none are).
+    pub fn extend<I>(&mut self, vals: I) -> Result<(), IntArrayError>
     where
         I: IntoIterator<Item = Element>,
     {
+        let orig = self.length;
         for v in vals {
-            self.push(v).unwrap();
+            if let Err(e) = self.push(v) {
+                self.resize(orig);
+                return Err(e);
+            }
         }
+        Ok(())
     }
 
-    pub fn extend_array(&mut self, vals: IntArray) {
+    pub fn extend_array(&mut self, vals: IntArray) -> Result<(), IntArrayError> {
         let (bpd, _) = IntArray::sizeval(self.bits, 0);
         if vals.bits == self.bits && self.length.is_multiple_of(bpd) {
             // fast path: self is word-aligned, so vals.data slots directly follow
             debug!("fast path: bits={}, length={}", self.bits, self.length);
             self.length += vals.length;
             self.data.extend(vals.data);
-            return;
+            return Ok(());
         }
-        // slow path
+        // slow path: bit-width conversion, atomic via extend()
         debug!("slow path: bits={}, length={}", self.bits, self.length);
-        self.extend(vals.iter());
+        self.extend(vals.iter())
     }
 
-    pub fn concat(&mut self, vals: IntArray) {
-        self.extend_array(vals);
+    pub fn concat(&mut self, vals: IntArray) -> Result<(), IntArrayError> {
+        self.extend_array(vals)
     }
 
     pub fn shape(self: &IntArray, bits: usize) -> IntArray {
