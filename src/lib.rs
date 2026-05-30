@@ -1,5 +1,6 @@
 use log::{debug, error};
 use rand::Rng;
+use serde::de::{Deserialize, Deserializer, SeqAccess, Visitor};
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 use std::ops::{AddAssign, MulAssign, Range, SubAssign};
 use std::sync::OnceLock;
@@ -200,6 +201,10 @@ impl IntArray {
         let bpd = ELEMENT_BITS / b;
         (bpd, len.div_ceil(bpd))
     }
+    fn bits_for_max(max_val: Element) -> usize {
+        max_val.ffs().max(1)
+    }
+
     pub fn new(b: usize, len: usize) -> IntArray {
         let (bpd, cap) = IntArray::sizeval(b, len);
         debug!("bpd={}, cap={}", bpd, cap);
@@ -318,14 +323,7 @@ impl IntArray {
     }
 
     pub fn shape_auto(&self) -> IntArray {
-        if self.length == 0 {
-            return IntArray::new(1, 0);
-        }
-        let mv = self.iter().max().unwrap();
-        let bits = match mv.ffs() {
-            0 => 1,
-            n => n,
-        };
+        let bits = IntArray::bits_for_max(self.iter().max().unwrap_or(0));
         IntArray::new_with_iter(bits, self.iter())
     }
 
@@ -538,6 +536,44 @@ impl Serialize for IntArray {
         let mut seq = serializer.serialize_seq(Some(self.length))?;
         self.iter().for_each(|x| seq.serialize_element(&x).unwrap());
         seq.end()
+    }
+}
+
+struct IntArrayVisitor;
+
+impl<'de> Visitor<'de> for IntArrayVisitor {
+    type Value = IntArray;
+
+    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "a sequence of unsigned integers")
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        let hint = seq.size_hint().unwrap_or(0);
+        let mut vals: Vec<Element> = Vec::with_capacity(hint);
+        while let Some(v) = seq.next_element()? {
+            vals.push(v);
+        }
+        let bits = IntArray::bits_for_max(vals.iter().copied().max().unwrap_or(0));
+        Ok(IntArray::new_with_vec(bits, vals))
+    }
+}
+
+/// Deserializes from a flat sequence of unsigned integers.
+///
+/// **Note:** Bit width is not preserved. The width is re-inferred from the
+/// maximum value in the sequence (minimum 1). An all-zeros array always
+/// deserializes with `bits = 1` regardless of the original width. This
+/// matches the behavior of [`IntArray::shape_auto`].
+impl<'de> Deserialize<'de> for IntArray {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_seq(IntArrayVisitor)
     }
 }
 
