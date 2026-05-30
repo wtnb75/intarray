@@ -5,6 +5,26 @@ use std::ops::{AddAssign, MulAssign, Range, SubAssign};
 use std::sync::OnceLock;
 use std::{cmp, fmt, mem};
 
+/// Error type for IntArray operations.
+#[derive(Debug, PartialEq)]
+pub enum IntArrayError {
+    OutOfBounds,
+    TooLarge,
+    Empty,
+}
+
+impl fmt::Display for IntArrayError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::OutOfBounds => write!(f, "index out of bounds"),
+            Self::TooLarge => write!(f, "value too large for bit width"),
+            Self::Empty => write!(f, "array is empty"),
+        }
+    }
+}
+
+impl std::error::Error for IntArrayError {}
+
 type Element = u64;
 // type Element = u128;
 const ELEMENT_BITS: usize = mem::size_of::<Element>() * 8;
@@ -268,7 +288,7 @@ impl IntArray {
 
     pub fn extend<I>(&mut self, vals: I)
     where
-        I: Iterator<Item = Element>,
+        I: IntoIterator<Item = Element>,
     {
         for v in vals {
             self.push(v).unwrap();
@@ -309,9 +329,9 @@ impl IntArray {
         IntArray::new_with_iter(bits, self.iter())
     }
 
-    pub fn pop(&mut self) -> Result<Element, String> {
+    pub fn pop(&mut self) -> Result<Element, IntArrayError> {
         if self.length == 0 {
-            return Err("empty".to_owned());
+            return Err(IntArrayError::Empty);
         }
         let res = self.get(self.length - 1);
         self.resize(self.length - 1);
@@ -368,45 +388,38 @@ impl IntArray {
         return (bpd, i / bpd, i % bpd);
     }
 
-    pub fn get(&self, i: usize) -> Result<Element, String> {
+    pub fn get(&self, i: usize) -> Result<Element, IntArrayError> {
         if self.length <= i {
-            return Err("OB".to_owned());
+            return Err(IntArrayError::OutOfBounds);
         }
-        // debug!("get {}/{}", i, self.capacity());
         let (_, idx, iv) = self.getoffset(i);
         let vv = self.data[idx];
-        // debug!("idx={}, iv={}, vv={}", idx, iv, vv);
         let res = (vv >> (iv * self.bits as usize)) & self.max_value();
         Ok(res)
     }
 
-    pub fn set(&mut self, i: usize, v: Element) -> Result<Element, String> {
+    pub fn set(&mut self, i: usize, v: Element) -> Result<(), IntArrayError> {
         if self.max_value() < v {
-            return Err("TooLarge".to_owned());
+            return Err(IntArrayError::TooLarge);
         }
         if self.length <= i {
-            return Err("OutOfBounds".to_owned());
+            return Err(IntArrayError::OutOfBounds);
         }
         let (_, idx, iv) = self.getoffset(i);
         let mask1 = (self.max_value()) << (iv * self.bits);
         let mask2 = v << (iv * self.bits);
-        let res = self.max_value() & (self.data[idx] >> (iv * self.bits));
         self.data[idx] = (self.data[idx] & (!mask1)) | mask2;
-        Ok(res)
+        Ok(())
     }
 
-    pub fn add(&mut self, i: usize, v: Element) -> Result<Element, String> {
-        match self.get(i) {
-            Ok(n) => self.set(i, n + v),
-            Err(e) => return Err(e),
-        }
+    pub fn add(&mut self, i: usize, v: Element) -> Result<(), IntArrayError> {
+        let n = self.get(i)?;
+        self.set(i, n + v)
     }
 
-    pub fn sub(&mut self, i: usize, v: Element) -> Result<Element, String> {
-        match self.get(i) {
-            Ok(n) => self.set(i, n - v),
-            Err(e) => return Err(e),
-        }
+    pub fn sub(&mut self, i: usize, v: Element) -> Result<(), IntArrayError> {
+        let n = self.get(i)?;
+        self.set(i, n - v)
     }
 
     pub fn incr_limit(&mut self, i: usize) -> Option<Element> {
@@ -437,11 +450,11 @@ impl IntArray {
         }
     }
 
-    pub fn incr(&mut self, i: usize) -> Result<Element, String> {
+    pub fn incr(&mut self, i: usize) -> Result<(), IntArrayError> {
         self.add(i, 1)
     }
 
-    pub fn decr(&mut self, i: usize) -> Result<Element, String> {
+    pub fn decr(&mut self, i: usize) -> Result<(), IntArrayError> {
         self.sub(i, 1)
     }
 
