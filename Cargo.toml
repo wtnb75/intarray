@@ -2,30 +2,28 @@
 name = "intarray"
 version = "0.1.0"
 authors = ["Takashi WATANABE <wtnb75@gmail.com>"]
-edition = "2018"
+edition = "2021"
 repository = "https://github.com/wtnb75/intarray"
 keywords = ["array", "memory"]
 license-file = "LICENSE"
 readme = "README.md"
 description = "memory efficient integer array"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-serde = "1.0.99"
-env_logger = "0.6.2"
-log = "0.4.8"
-rand = "0.7.0"
+serde = "1"
+env_logger = "0.11"
+log = "0.4"
+rand = "0.8"
 
 [dev-dependencies]
-test-env-log = "0.1.0"
-serde_json = "1.0.40"
-serde_derive = "1.0.99"
-serde_yaml = "0.8.9"
-clap = "2.33.0"
-sha2 = "0.8.0"
-digest = "0.8.1"
-hex = "0.3.2"
+test-log = { version = "0.2", features = ["env_logger"] }
+serde_json = "1"
+serde_derive = "1"
+serde_yaml = "0.9"
+clap = "4"
+sha2 = "0.10"
+digest = "0.10"
+hex = "0.4"
 
 [[example]]
 name = "bench"

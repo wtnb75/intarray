@@ -1,6 +1,4 @@
-#[macro_use]
-extern crate log;
-
+use log::{debug, error};
 use rand::Rng;
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 use std::ops::{AddAssign, MulAssign, Range, SubAssign};
@@ -336,7 +334,7 @@ impl IntArray {
 
     pub fn max_value(&self) -> Element {
         if self.bits == ELEMENT_BITS {
-            return Element::max_value();
+            return Element::MAX;
         }
         ((1 as Element) << self.bits) - 1
     }
@@ -461,12 +459,12 @@ impl IntArray {
             let mvbits = ELEMENT_BITS - (ELEMENT_BITS % self.bits);
             let mvval = (1 as Element) << mvbits;
             for i in 0..(self.data.len() - 1) {
-                self.data[i] = rng.gen_range(0, mvval);
+                self.data[i] = rng.gen_range(0..mvval);
             }
         }
         let bpd = ELEMENT_BITS / self.bits;
         for i in (self.data.len() - 1) * bpd..self.length {
-            self.set(i, rng.gen_range(0, self.max_value())).unwrap();
+            self.set(i, rng.gen_range(0..self.max_value())).unwrap();
         }
     }
 }

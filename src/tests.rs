@@ -1,9 +1,10 @@
 use super::*;
+use log::info;
 use serde_derive::Serialize;
 use serde_json;
 use serde_yaml;
 use std::time::Instant;
-use test_env_log::test;
+use test_log::test;
 
 #[test]
 fn construct() {
@@ -201,21 +202,12 @@ fn yaml() {
     };
     x.v.incr(1).unwrap();
     let serialized = serde_yaml::to_string(&x).unwrap();
-    assert_eq!(
-        serialized,
-        r#"---
-a: 10
-v:
-  - 0
-  - 1
-  - 0"#
-            .to_string()
-    )
+    assert_eq!(serialized, "a: 10\nv:\n- 0\n- 1\n- 0\n")
 }
 
 #[test]
 fn u64test() {
-    println!("min={}, max={}", u64::min_value(), u64::max_value());
+    println!("min={}, max={}", u64::MIN, u64::MAX);
     let mv: f64 = u64::max_value() as f64;
     for i in 2..64 {
         println!("log({}, max) = {}", i, mv.log(i as f64));
@@ -225,8 +217,8 @@ fn u64test() {
 #[test]
 fn sumx() {
     let mut rng = rand::thread_rng();
-    let bits: usize = rng.gen_range(1, 20);
-    let entries: usize = rng.gen_range(1 * 1024 * 1024, (64 / bits as usize) * 1024 * 1024);
+    let bits: usize = rng.gen_range(1..20);
+    let entries: usize = rng.gen_range((1 * 1024 * 1024)..(64 / bits as usize) * 1024 * 1024);
     let mut v = IntArray::new(bits, entries);
     let maxv = v.max_value();
     info!(

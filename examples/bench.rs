@@ -1,47 +1,42 @@
-extern crate clap;
-extern crate digest;
-
-// use blake2::Blake2b;
-use clap::{App, Arg};
+use clap::{Arg, Command};
 use digest::Digest;
-use hex;
 use intarray::IntArray;
 use sha2::Sha256;
 use std::mem;
 
 fn hash<D: Digest>(input: &str, output: &mut [u8]) {
     let mut hasher = D::new();
-    hasher.input(input.as_bytes());
-    output.copy_from_slice(hasher.result().as_slice());
+    hasher.update(input.as_bytes());
+    output.copy_from_slice(hasher.finalize().as_slice());
 }
 
 fn main() {
-    let app = App::new("bench")
+    let app = Command::new("bench")
         .version("0.0.1")
         .arg(
-            Arg::with_name("bits")
-                .short("b")
+            Arg::new("bits")
+                .short('b')
                 .long("bits")
-                .takes_value(true)
+                .num_args(1)
                 .default_value("4"),
         )
         .arg(
-            Arg::with_name("length")
-                .short("l")
+            Arg::new("length")
+                .short('l')
                 .long("length")
-                .takes_value(true)
+                .num_args(1)
                 .default_value("1024"),
         )
-        .arg(Arg::with_name("count"));
+        .arg(Arg::new("count"));
     let matches = app.get_matches();
     let mut bits: usize = 0;
-    if let Some(o) = matches.value_of("bits") {
+    if let Some(o) = matches.get_one::<String>("bits") {
         bits = o.parse::<usize>().unwrap();
         println!("{} bits", bits);
         assert!(bits != 0, "0 bits");
     }
     let mut length: usize = 0;
-    if let Some(o) = matches.value_of("length") {
+    if let Some(o) = matches.get_one::<String>("length") {
         length = o.parse::<usize>().unwrap();
         println!("length={} ", length);
     }
