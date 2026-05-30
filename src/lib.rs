@@ -414,12 +414,14 @@ impl IntArray {
 
     pub fn add(&mut self, i: usize, v: Element) -> Result<(), IntArrayError> {
         let n = self.get(i)?;
-        self.set(i, n + v)
+        let sum = n.checked_add(v).ok_or(IntArrayError::TooLarge)?;
+        self.set(i, sum)
     }
 
     pub fn sub(&mut self, i: usize, v: Element) -> Result<(), IntArrayError> {
         let n = self.get(i)?;
-        self.set(i, n - v)
+        let diff = n.checked_sub(v).ok_or(IntArrayError::TooLarge)?;
+        self.set(i, diff)
     }
 
     pub fn incr_limit(&mut self, i: usize) -> Option<Element> {

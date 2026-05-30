@@ -474,6 +474,20 @@ fn error_types() {
 
     let mut empty = IntArray::new(4, 0);
     assert_eq!(empty.pop(), Err(IntArrayError::Empty));
+
+    // add/sub/incr/decr error propagation
+    let mut v2 = IntArray::new(4, 3);
+    assert_eq!(v2.add(10, 1), Err(IntArrayError::OutOfBounds));
+    assert_eq!(v2.sub(10, 1), Err(IntArrayError::OutOfBounds));
+    assert_eq!(v2.incr(10), Err(IntArrayError::OutOfBounds));
+    assert_eq!(v2.decr(10), Err(IntArrayError::OutOfBounds));
+    // overflow/underflow → TooLarge
+    v2.set(0, 15).unwrap(); // max for 4-bit
+    assert_eq!(v2.add(0, 1), Err(IntArrayError::TooLarge));
+    assert_eq!(v2.incr(0), Err(IntArrayError::TooLarge));
+    v2.set(0, 0).unwrap();
+    assert_eq!(v2.sub(0, 1), Err(IntArrayError::TooLarge));
+    assert_eq!(v2.decr(0), Err(IntArrayError::TooLarge));
 }
 
 #[test]
