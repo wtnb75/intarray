@@ -599,6 +599,54 @@ fn element_add() {
     assert_eq!(a.addval_bits(2, 8).unwrap() & 0xffff, 0x1436);
 }
 
+#[test]
+fn deserialize_json_roundtrip() {
+    let mut v = IntArray::new(4, 5);
+    for i in 0..5 {
+        v.set(i, (i * 3) as u64).unwrap();
+    }
+    let json = serde_json::to_string(&v).unwrap();
+    let v2: IntArray = serde_json::from_str(&json).unwrap();
+    assert_eq!(v.length, v2.length);
+    for i in 0..v.length {
+        assert_eq!(v.get(i).unwrap(), v2.get(i).unwrap());
+    }
+}
+
+#[test]
+fn deserialize_yaml_roundtrip() {
+    let mut v = IntArray::new(8, 4);
+    for i in 0..4 {
+        v.set(i, (i * 50) as u64).unwrap();
+    }
+    let yaml = serde_yaml::to_string(&v).unwrap();
+    let v2: IntArray = serde_yaml::from_str(&yaml).unwrap();
+    assert_eq!(v.length, v2.length);
+    for i in 0..v.length {
+        assert_eq!(v.get(i).unwrap(), v2.get(i).unwrap());
+    }
+}
+
+#[test]
+fn deserialize_empty() {
+    let v = IntArray::new(4, 0);
+    let json = serde_json::to_string(&v).unwrap();
+    let v2: IntArray = serde_json::from_str(&json).unwrap();
+    assert_eq!(v2.length, 0);
+    assert!(v2.bits >= 1);
+}
+
+#[test]
+fn deserialize_all_zeros() {
+    let v = IntArray::new(4, 3);
+    let json = serde_json::to_string(&v).unwrap();
+    let v2: IntArray = serde_json::from_str(&json).unwrap();
+    assert_eq!(v2.length, 3);
+    for i in 0..3 {
+        assert_eq!(v2.get(i).unwrap(), 0);
+    }
+}
+
 /*
     #[bench]
     fn getbench1(b: &mut Bencher) {

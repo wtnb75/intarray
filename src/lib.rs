@@ -1,5 +1,6 @@
 use log::{debug, error};
 use rand::Rng;
+use serde::de::{Deserialize, Deserializer, SeqAccess, Visitor};
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 use std::ops::{AddAssign, MulAssign, Range, SubAssign};
 use std::sync::OnceLock;
@@ -538,6 +539,44 @@ impl Serialize for IntArray {
         let mut seq = serializer.serialize_seq(Some(self.length))?;
         self.iter().for_each(|x| seq.serialize_element(&x).unwrap());
         seq.end()
+    }
+}
+
+struct IntArrayVisitor;
+
+impl<'de> Visitor<'de> for IntArrayVisitor {
+    type Value = IntArray;
+
+    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "a sequence of unsigned integers")
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        let mut vals: Vec<Element> = Vec::new();
+        while let Some(v) = seq.next_element()? {
+            vals.push(v);
+        }
+        let bits = if vals.is_empty() {
+            1
+        } else {
+            match vals.iter().copied().max().unwrap().ffs() {
+                0 => 1,
+                n => n,
+            }
+        };
+        Ok(IntArray::new_with_vec(bits, vals))
+    }
+}
+
+impl<'de> Deserialize<'de> for IntArray {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_seq(IntArrayVisitor)
     }
 }
 
