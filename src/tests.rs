@@ -466,6 +466,48 @@ fn shape_auto_empty() {
 }
 
 #[test]
+fn error_types() {
+    let mut v = IntArray::new(4, 3);
+    assert_eq!(v.get(10), Err(IntArrayError::OutOfBounds));
+    assert_eq!(v.set(10, 0), Err(IntArrayError::OutOfBounds));
+    assert_eq!(v.set(0, 100), Err(IntArrayError::TooLarge));
+
+    let mut empty = IntArray::new(4, 0);
+    assert_eq!(empty.pop(), Err(IntArrayError::Empty));
+
+    // add/sub/incr/decr error propagation
+    let mut v2 = IntArray::new(4, 3);
+    assert_eq!(v2.add(10, 1), Err(IntArrayError::OutOfBounds));
+    assert_eq!(v2.sub(10, 1), Err(IntArrayError::OutOfBounds));
+    assert_eq!(v2.incr(10), Err(IntArrayError::OutOfBounds));
+    assert_eq!(v2.decr(10), Err(IntArrayError::OutOfBounds));
+    // overflow/underflow → TooLarge
+    v2.set(0, 15).unwrap(); // max for 4-bit
+    assert_eq!(v2.add(0, 1), Err(IntArrayError::TooLarge));
+    assert_eq!(v2.incr(0), Err(IntArrayError::TooLarge));
+    v2.set(0, 0).unwrap();
+    assert_eq!(v2.sub(0, 1), Err(IntArrayError::TooLarge));
+    assert_eq!(v2.decr(0), Err(IntArrayError::TooLarge));
+}
+
+#[test]
+fn extend_into_iter() {
+    let mut v = IntArray::new(4, 0);
+    // IntoIterator: pass a Vec directly (not .iter())
+    v.extend(vec![1u64, 2, 3]);
+    assert_eq!(v.length, 3);
+    assert_eq!(v.get(0).unwrap(), 1);
+    assert_eq!(v.get(1).unwrap(), 2);
+    assert_eq!(v.get(2).unwrap(), 3);
+
+    // IntoIterator: pass a range
+    v.extend(4u64..7);
+    assert_eq!(v.length, 6);
+    assert_eq!(v.get(3).unwrap(), 4);
+    assert_eq!(v.get(5).unwrap(), 6);
+}
+
+#[test]
 fn add64() {
     let v1 = 0x1234_5678_90ab_cdef;
     let v2 = 2;
