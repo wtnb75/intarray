@@ -49,6 +49,18 @@ fn construct_withvec_bad() {
 }
 
 #[test]
+#[should_panic(expected = "bits must be in 1..=64")]
+fn construct_zero_bits() {
+    let _ = IntArray::new(0, 10);
+}
+
+#[test]
+#[should_panic(expected = "bits must be in 1..=64")]
+fn construct_overflow_bits() {
+    let _ = IntArray::new(65, 10);
+}
+
+#[test]
 fn modify() {
     let mut v = IntArray::new(2, 10);
     v.set(3, 1).unwrap();
