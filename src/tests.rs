@@ -633,7 +633,35 @@ fn deserialize_empty() {
     let json = serde_json::to_string(&v).unwrap();
     let v2: IntArray = serde_json::from_str(&json).unwrap();
     assert_eq!(v2.length, 0);
-    assert!(v2.bits >= 1);
+    assert_eq!(v2.bits, 1);
+}
+
+// Bit width is NOT preserved: it is re-inferred from the max value.
+// A bits=8 array with max value 7 (fits in 3 bits) deserializes as bits=3.
+#[test]
+fn deserialize_bits_inferred() {
+    let mut v = IntArray::new(8, 3);
+    v.set(0, 1).unwrap();
+    v.set(1, 2).unwrap();
+    v.set(2, 7).unwrap(); // max = 7, ffs(7) = 3 → bits=3, not 8
+    let json = serde_json::to_string(&v).unwrap();
+    let v2: IntArray = serde_json::from_str(&json).unwrap();
+    assert_eq!(v2.bits, 3);
+    assert_eq!(v2.get(2).unwrap(), 7);
+    // write up to the re-inferred capacity (max = 7 for 3-bit)
+    v2.clone().set(0, 7).unwrap();
+}
+
+#[test]
+fn deserialize_u64_max() {
+    let mut v = IntArray::new(64, 2);
+    v.set(0, u64::MAX).unwrap();
+    v.set(1, 0).unwrap();
+    let json = serde_json::to_string(&v).unwrap();
+    let v2: IntArray = serde_json::from_str(&json).unwrap();
+    assert_eq!(v2.bits, 64);
+    assert_eq!(v2.get(0).unwrap(), u64::MAX);
+    assert_eq!(v2.get(1).unwrap(), 0);
 }
 
 #[test]
