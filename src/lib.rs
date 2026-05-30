@@ -275,9 +275,9 @@ impl IntArray {
     pub fn extend_array(&mut self, vals: IntArray) {
         let (bpd, _) = IntArray::sizeval(self.bits, 0);
         if vals.bits == self.bits && self.length % bpd == 0 {
-            // fast path
+            // fast path: self is word-aligned, so vals.data slots directly follow
             debug!("fast path: bits={}, length={}", self.bits, self.length);
-            self.resize(self.length + vals.length);
+            self.length += vals.length;
             self.data.extend(vals.data);
             return;
         }
@@ -307,6 +307,9 @@ impl IntArray {
     }
 
     pub fn pop(&mut self) -> Result<Element, String> {
+        if self.length == 0 {
+            return Err("empty".to_owned());
+        }
         let res = self.get(self.length - 1);
         self.resize(self.length - 1);
         res
@@ -342,16 +345,19 @@ impl IntArray {
         ((1 as Element) << self.bits) - 1
     }
 
-    pub fn max(&self) -> Element {
-        self.iter().max().unwrap()
+    pub fn max(&self) -> Option<Element> {
+        self.iter().max()
     }
 
-    pub fn min(&self) -> Element {
-        self.iter().min().unwrap()
+    pub fn min(&self) -> Option<Element> {
+        self.iter().min()
     }
 
-    pub fn average(&self) -> f64 {
-        self.sum().unwrap() as f64 / self.len() as f64
+    pub fn average(&self) -> Option<f64> {
+        if self.length == 0 {
+            return None;
+        }
+        Some(self.sum().unwrap() as f64 / self.len() as f64)
     }
 
     fn getoffset(&self, i: usize) -> (usize, usize, usize) {
