@@ -238,8 +238,8 @@ impl IntArray {
             // rest
             if length % bpd != 0 {
                 let i = length / bpd;
-                let mask = (1 << (bpd * (length % bpd))) - 1;
-                res.data[i] = self.data[offset / bpd + i] & (!mask);
+                let mask = ((1 as Element) << (self.bits * (length % bpd))) - 1;
+                res.data[i] = self.data[offset / bpd + i] & mask;
             }
         } else {
             // slow path
@@ -294,7 +294,10 @@ impl IntArray {
         IntArray::new_with_iter(bits, self.iter())
     }
 
-    pub fn shape_auto<'a>(self: &'a IntArray) -> IntArray {
+    pub fn shape_auto(&self) -> IntArray {
+        if self.length == 0 {
+            return IntArray::new(1, 0);
+        }
         let mv = self.iter().max().unwrap();
         let bits = match mv.ffs() {
             0 => 1,
@@ -450,6 +453,9 @@ impl IntArray {
     }
 
     pub fn fill_random(&mut self) {
+        if self.length == 0 {
+            return;
+        }
         let mut rng = rand::thread_rng();
         if ELEMENT_BITS % self.bits == 0 {
             for i in 0..(self.data.len() - 1) {
@@ -464,7 +470,7 @@ impl IntArray {
         }
         let bpd = ELEMENT_BITS / self.bits;
         for i in (self.data.len() - 1) * bpd..self.length {
-            self.set(i, rng.gen_range(0..self.max_value())).unwrap();
+            self.set(i, rng.gen_range(0..=self.max_value())).unwrap();
         }
     }
 }
@@ -476,7 +482,7 @@ impl<'a> Iterator for IntIter<'a> {
     }
 
     fn count(self) -> usize {
-        self.a.length
+        self.range.len()
     }
 }
 

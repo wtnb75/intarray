@@ -365,13 +365,45 @@ fn test_subarray() {
     assert_eq!(v2.sum().unwrap(), 3);
     assert_eq!(v2.length, 3);
 
-    // fast path
+    // fast path (length % bpd == 0, no partial last word)
     let v3 = IntArray::new_with_iter(10, 0..64);
     let v4 = v3.subarray(6, 18);
     assert_eq!(v4.get(0).unwrap(), 6);
     assert_eq!(v4.get(1).unwrap(), 7);
     assert_eq!(v4.sum().unwrap(), 261);
     assert_eq!(v4.length, 18);
+
+    // fast path with partial last word (was masking in the wrong direction)
+    // bits=8 -> bpd=8; offset=0 (aligned), length=3 (3 % 8 != 0 -> partial last word)
+    let v5 = IntArray::new_with_iter(8, 0..20u64);
+    let v6 = v5.subarray(0, 3);
+    assert_eq!(v6.length, 3);
+    assert_eq!(v6.get(0).unwrap(), 0);
+    assert_eq!(v6.get(1).unwrap(), 1);
+    assert_eq!(v6.get(2).unwrap(), 2);
+}
+
+#[test]
+fn fill_random_empty() {
+    let mut v = IntArray::new(4, 0);
+    v.fill_random(); // must not panic on empty array
+    assert_eq!(v.length, 0);
+}
+
+#[test]
+fn iter_count_after_consume() {
+    let v = IntArray::new_with_vec(4, vec![0, 1, 2, 3, 4]);
+    let mut iter = v.iter();
+    iter.next();
+    iter.next();
+    assert_eq!(iter.count(), 3); // 5 total - 2 consumed = 3 remaining
+}
+
+#[test]
+fn shape_auto_empty() {
+    let v = IntArray::new(4, 0);
+    let v2 = v.shape_auto(); // must not panic on empty array
+    assert_eq!(v2.length, 0);
 }
 
 #[test]
