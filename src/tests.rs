@@ -96,13 +96,13 @@ fn extend_fast() {
     let mut v1 = IntArray::new(2, 3);
     let v2 = IntArray::new(10, 20);
     // slow path
-    v1.extend_array(v2);
+    v1.extend_array(v2).unwrap();
     assert_eq!(v1.length, 23);
     assert_eq!(v1.sum().unwrap(), 0);
 
     let mut v3 = IntArray::new(2, 128);
     let v4 = IntArray::new(2, 10);
-    v3.extend_array(v4);
+    v3.extend_array(v4).unwrap();
     assert_eq!(v3.length, 138);
     assert_eq!(v3.sum().unwrap(), 0);
 
@@ -111,7 +111,7 @@ fn extend_fast() {
     let mut v5 = IntArray::new_with_iter(2, [0, 1, 2, 3].iter().cycle().take(32).map(|&x| x));
     let v6 = IntArray::new_with_iter(2, [1, 2, 3, 0].iter().cycle().take(32).map(|&x| x));
     let expected_sum = v5.sum().unwrap() + v6.sum().unwrap();
-    v5.extend_array(v6);
+    v5.extend_array(v6).unwrap();
     assert_eq!(v5.length, 64);
     assert_eq!(v5.sum().unwrap(), expected_sum);
     assert_eq!(v5.get(32).unwrap(), 1); // first element of appended data visible
@@ -308,12 +308,43 @@ fn test_bits() {
 #[test]
 fn pushpop() {
     let mut v = IntArray::new_with_vec(2, vec![0, 1, 2]);
-    v.push(3);
+    v.push(3).unwrap();
     assert_eq!(v.pop().unwrap(), 3);
     assert_eq!(v.pop().unwrap(), 2);
     assert_eq!(v.pop().unwrap(), 1);
     assert_eq!(v.pop().unwrap(), 0);
     assert!(v.pop().is_err()); // must not panic on empty
+}
+
+#[test]
+fn push_too_large() {
+    let mut v = IntArray::new(2, 0); // max value = 3
+    assert_eq!(v.push(4), Err(IntArrayError::TooLarge));
+    assert_eq!(v.length, 0); // array must not grow on failure
+}
+
+#[test]
+fn extend_too_large() {
+    let mut v = IntArray::new(2, 0); // max value = 3
+    assert_eq!(v.extend(vec![1u64, 2, 4]), Err(IntArrayError::TooLarge));
+    assert_eq!(v.length, 0); // atomic: array unchanged on error
+}
+
+#[test]
+fn extend_array_too_large() {
+    // slow path (different bit widths): atomic rollback on error
+    let mut dst = IntArray::new(2, 0); // max value = 3
+    let src = IntArray::new_with_vec(4, vec![1, 2, 5]); // 5 > 3
+    assert_eq!(dst.extend_array(src), Err(IntArrayError::TooLarge));
+    assert_eq!(dst.length, 0); // atomic: array unchanged on error
+}
+
+#[test]
+fn concat_too_large() {
+    let mut dst = IntArray::new(2, 0); // max value = 3
+    let src = IntArray::new_with_vec(4, vec![0, 4]); // 4 > 3
+    assert_eq!(dst.concat(src), Err(IntArrayError::TooLarge));
+    assert_eq!(dst.length, 0); // atomic: array unchanged on error
 }
 
 #[test]
@@ -328,7 +359,7 @@ fn max_min_empty() {
 fn cat() {
     let mut v1 = IntArray::new_with_vec(2, vec![0, 1, 2]);
     let v2 = IntArray::new_with_vec(3, vec![0, 1, 2]);
-    v1.concat(v2);
+    v1.concat(v2).unwrap();
     assert_eq!(v1.length, 6);
     assert_eq!(v1.get(3).unwrap(), 0);
 }
@@ -494,14 +525,14 @@ fn error_types() {
 fn extend_into_iter() {
     let mut v = IntArray::new(4, 0);
     // IntoIterator: pass a Vec directly (not .iter())
-    v.extend(vec![1u64, 2, 3]);
+    v.extend(vec![1u64, 2, 3]).unwrap();
     assert_eq!(v.length, 3);
     assert_eq!(v.get(0).unwrap(), 1);
     assert_eq!(v.get(1).unwrap(), 2);
     assert_eq!(v.get(2).unwrap(), 3);
 
     // IntoIterator: pass a range
-    v.extend(4u64..7);
+    v.extend(4u64..7).unwrap();
     assert_eq!(v.length, 6);
     assert_eq!(v.get(3).unwrap(), 4);
     assert_eq!(v.get(5).unwrap(), 6);
