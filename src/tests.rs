@@ -93,6 +93,16 @@ fn extend_fast() {
     v3.extend_array(v4);
     assert_eq!(v3.length, 138);
     assert_eq!(v3.sum().unwrap(), 0);
+
+    // fast path with non-zero values: previously data.extend() appended after resize-allocated
+    // zero slots, so get() returned zeros and sum() double-counted
+    let mut v5 = IntArray::new_with_iter(2, [0, 1, 2, 3].iter().cycle().take(32).map(|&x| x));
+    let v6 = IntArray::new_with_iter(2, [1, 2, 3, 0].iter().cycle().take(32).map(|&x| x));
+    let expected_sum = v5.sum().unwrap() + v6.sum().unwrap();
+    v5.extend_array(v6);
+    assert_eq!(v5.length, 64);
+    assert_eq!(v5.sum().unwrap(), expected_sum);
+    assert_eq!(v5.get(32).unwrap(), 1); // first element of appended data visible
 }
 
 #[test]
@@ -291,6 +301,15 @@ fn pushpop() {
     assert_eq!(v.pop().unwrap(), 2);
     assert_eq!(v.pop().unwrap(), 1);
     assert_eq!(v.pop().unwrap(), 0);
+    assert!(v.pop().is_err()); // must not panic on empty
+}
+
+#[test]
+fn max_min_empty() {
+    let v = IntArray::new(4, 0);
+    assert_eq!(v.max(), None);
+    assert_eq!(v.min(), None);
+    assert_eq!(v.average(), None);
 }
 
 #[test]
@@ -335,14 +354,14 @@ fn assign_array() {
     let mut v1 = IntArray::new_with_vec(10, vec![0, 1, 2, 0, 1, 2]);
     let v2 = IntArray::new_with_vec(10, vec![2, 1, 0, 2, 1, 0]);
     v1 += v2;
-    assert_eq!(v1.max(), 2);
-    assert_eq!(v1.min(), 2);
+    assert_eq!(v1.max(), Some(2));
+    assert_eq!(v1.min(), Some(2));
     v1 -= IntArray::new_with_vec(10, vec![2, 1, 0, 2, 1, 0]);
     assert_eq!(v1.get(0).unwrap(), 0);
     assert_eq!(v1.get(2).unwrap(), 2);
     v1 += IntArray::new_with_vec(3, vec![2, 1, 0, 2, 1, 0]);
-    assert_eq!(v1.max(), 2);
-    assert_eq!(v1.min(), 2);
+    assert_eq!(v1.max(), Some(2));
+    assert_eq!(v1.min(), Some(2));
     v1 -= IntArray::new_with_vec(5, vec![2, 1, 0, 2, 1, 0, 2]);
     assert_eq!(v1.get(0).unwrap(), 0);
     assert_eq!(v1.get(2).unwrap(), 2);
@@ -351,8 +370,8 @@ fn assign_array() {
 #[test]
 fn maxmin() {
     let v1 = IntArray::new_with_vec(10, vec![0, 1, 2, 0, 1, 2]);
-    assert_eq!(v1.max(), 2);
-    assert_eq!(v1.min(), 0);
+    assert_eq!(v1.max(), Some(2));
+    assert_eq!(v1.min(), Some(0));
 }
 
 #[test]
@@ -365,13 +384,73 @@ fn test_subarray() {
     assert_eq!(v2.sum().unwrap(), 3);
     assert_eq!(v2.length, 3);
 
-    // fast path
+    // fast path (length % bpd == 0, no partial last word)
     let v3 = IntArray::new_with_iter(10, 0..64);
     let v4 = v3.subarray(6, 18);
     assert_eq!(v4.get(0).unwrap(), 6);
     assert_eq!(v4.get(1).unwrap(), 7);
     assert_eq!(v4.sum().unwrap(), 261);
     assert_eq!(v4.length, 18);
+
+    // fast path with partial last word (was masking in the wrong direction)
+    // bits=8 -> bpd=8; offset=0 (aligned), length=3 (3 % 8 != 0 -> partial last word)
+    let v5 = IntArray::new_with_iter(8, 0..20u64);
+    let v6 = v5.subarray(0, 3);
+    assert_eq!(v6.length, 3);
+    assert_eq!(v6.get(0).unwrap(), 0);
+    assert_eq!(v6.get(1).unwrap(), 1);
+    assert_eq!(v6.get(2).unwrap(), 2);
+
+    // fast path with non-zero aligned offset + partial last word
+    // bits=8, bpd=8; offset=8 (8 % 8 == 0), length=3 -> partial last word in source word[1]
+    let v7 = IntArray::new_with_iter(8, 0..20u64);
+    let v8 = v7.subarray(8, 3);
+    assert_eq!(v8.length, 3);
+    assert_eq!(v8.get(0).unwrap(), 8);
+    assert_eq!(v8.get(1).unwrap(), 9);
+    assert_eq!(v8.get(2).unwrap(), 10);
+}
+
+#[test]
+fn fill_random_empty() {
+    let mut v = IntArray::new(4, 0);
+    v.fill_random(); // must not panic on empty array
+    assert_eq!(v.length, 0);
+}
+
+#[test]
+fn fill_random_single_word() {
+    // length=1 means data.len()==1: the bulk loop (0..0) is empty,
+    // only the tail loop runs. Previously would have underflowed.
+    let mut v = IntArray::new(8, 1);
+    v.fill_random();
+    assert_eq!(v.length, 1);
+    assert!(v.get(0).is_ok());
+}
+
+#[test]
+fn iter_count_after_consume() {
+    let v = IntArray::new_with_vec(4, vec![0, 1, 2, 3, 4]);
+    let mut iter = v.iter();
+    iter.next();
+    iter.next();
+    assert_eq!(iter.count(), 3); // 5 total - 2 consumed = 3 remaining
+
+    // fully consumed iterator must return 0, not total length
+    let v2 = IntArray::new_with_vec(4, vec![0, 1, 2]);
+    let mut iter2 = v2.iter();
+    for _ in 0..3 {
+        iter2.next();
+    }
+    assert_eq!(iter2.count(), 0);
+}
+
+#[test]
+fn shape_auto_empty() {
+    let v = IntArray::new(4, 0);
+    let v2 = v.shape_auto(); // must not panic on empty array
+    assert_eq!(v2.length, 0);
+    assert_eq!(v2.bits, 1); // minimum valid bits for empty array
 }
 
 #[test]
