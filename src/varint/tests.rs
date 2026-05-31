@@ -83,6 +83,25 @@ fn encode_decode_large_bigint() {
     assert_eq!(arr.get(1).unwrap(), neg_big);
 }
 
+// --- k=1 edge cases ---
+
+#[test]
+fn k1_single_zero() {
+    let mut arr = VarIntArray::new(1).unwrap();
+    arr.push(bi(0)).unwrap();
+    assert_eq!(arr.block_count(), 1);
+    let v: Vec<_> = arr.iter().collect();
+    assert_eq!(v, vec![bi(0)]);
+}
+
+#[test]
+fn k1_multiple_pushes_each_own_block() {
+    let arr = VarIntArray::new_with_vec(1, vec![bi(1), bi(2), bi(3)]).unwrap();
+    assert_eq!(arr.block_count(), 3);
+    let v: Vec<_> = arr.iter().collect();
+    assert_eq!(v, vec![bi(1), bi(2), bi(3)]);
+}
+
 // --- block layout verification ---
 
 #[test]
@@ -100,12 +119,30 @@ fn spec_block_example() {
     assert_eq!(block.data[1], 0b10011110); // 0x9E
 }
 
+// --- metadata ---
+
+#[test]
+fn datasize_nonzero() {
+    let empty = VarIntArray::new(4).unwrap();
+    assert!(empty.datasize() > 0); // struct overhead always present
+    let arr = VarIntArray::new_with_vec(4, vec![bi(1), bi(2)]).unwrap();
+    assert!(arr.datasize() > empty.datasize());
+}
+
 // --- get / set ---
 
 #[test]
 fn out_of_bounds_get() {
     let arr = VarIntArray::new(4).unwrap();
     assert_eq!(arr.get(0), Err(ArrayError::OutOfBounds));
+}
+
+#[test]
+fn out_of_bounds_usize_max() {
+    let arr = VarIntArray::new_with_vec(4, vec![bi(1)]).unwrap();
+    assert_eq!(arr.get(usize::MAX), Err(ArrayError::OutOfBounds));
+    let mut arr2 = VarIntArray::new_with_vec(4, vec![bi(1)]).unwrap();
+    assert_eq!(arr2.set(usize::MAX, bi(99)), Err(ArrayError::OutOfBounds));
 }
 
 #[test]
@@ -222,6 +259,16 @@ fn iter_across_blocks() {
 }
 
 #[test]
+fn iter_all_full_blocks() {
+    // k=2: 4 elements → exactly 2 full blocks; iterator must not over-advance
+    let vals: Vec<_> = (0i64..4).map(bi).collect();
+    let arr = VarIntArray::new_with_vec(2, vals.clone()).unwrap();
+    assert_eq!(arr.block_count(), 2);
+    let collected: Vec<_> = arr.iter().collect();
+    assert_eq!(collected, vals);
+}
+
+#[test]
 fn iter_size_hint() {
     let arr = VarIntArray::new_with_vec(4, vec![bi(1), bi(2), bi(3)]).unwrap();
     let mut it = arr.iter();
@@ -267,6 +314,41 @@ fn stats_single_element() {
     assert_eq!(arr.average().unwrap(), 42.0f64);
 }
 
+#[test]
+fn average_large_value_is_finite_or_nan() {
+    // 10^400 exceeds f64 max (~1.8×10^308); average should be ±infinity or NaN, not panic
+    let huge: BigInt = std::iter::repeat('9').take(400).collect::<String>().parse().unwrap();
+    let arr = VarIntArray::new_with_vec(64, vec![huge]).unwrap();
+    let avg = arr.average().unwrap();
+    assert!(avg.is_nan() || avg.is_infinite());
+}
+
+// --- clone / eq ---
+
+#[test]
+fn clone_and_eq() {
+    let a = VarIntArray::new_with_vec(4, vec![bi(1), bi(-2), bi(3)]).unwrap();
+    let b = a.clone();
+    assert_eq!(a, b);
+}
+
+#[test]
+fn eq_ignores_k_and_block_structure() {
+    // same elements but different k → must be equal
+    let a = VarIntArray::new_with_vec(2, vec![bi(1), bi(-2), bi(3)]).unwrap();
+    let b = VarIntArray::new_with_vec(4, vec![bi(1), bi(-2), bi(3)]).unwrap();
+    assert_eq!(a, b);
+}
+
+#[test]
+fn serde_round_trip_eq() {
+    // serde resets k to 64; the original had k=4 — they must still be equal
+    let orig = VarIntArray::new_with_vec(4, vec![bi(0), bi(-1), bi(1)]).unwrap();
+    let json = serde_json::to_string(&orig).unwrap();
+    let loaded: VarIntArray = serde_json::from_str(&json).unwrap();
+    assert_eq!(orig, loaded);
+}
+
 // --- extend / extend_array ---
 
 #[test]
@@ -287,6 +369,15 @@ fn extend_array_different_k() {
     assert_eq!(b.get(1).unwrap(), bi(20));
 }
 
+#[test]
+fn extend_array_empty_source() {
+    let mut a = VarIntArray::new_with_vec(4, vec![bi(1)]).unwrap();
+    let empty = VarIntArray::new(2).unwrap();
+    a.extend_array(&empty).unwrap();
+    assert_eq!(a.len(), 1);
+    assert_eq!(a.get(0).unwrap(), bi(1));
+}
+
 // --- display ---
 
 #[test]
@@ -305,6 +396,19 @@ fn display_large_value() {
 }
 
 // --- serde ---
+
+#[test]
+fn serde_json_format_is_flat_string_array() {
+    let arr = VarIntArray::new_with_vec(4, vec![bi(-1), bi(2)]).unwrap();
+    let json = serde_json::to_string(&arr).unwrap();
+    assert_eq!(json, r#"["-1","2"]"#);
+}
+
+#[test]
+fn serde_invalid_string_returns_error() {
+    let result: Result<VarIntArray, _> = serde_json::from_str(r#"["not_a_number"]"#);
+    assert!(result.is_err());
+}
 
 #[test]
 fn serde_round_trip() {

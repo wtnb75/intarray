@@ -6,6 +6,8 @@ use serde::de::{Deserialize, Deserializer, SeqAccess, Visitor};
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 use std::{fmt, mem};
 
+const DEFAULT_K: usize = 64;
+
 #[derive(Clone, Debug, PartialEq)]
 struct BitBlock {
     data: Vec<u8>,
@@ -23,7 +25,11 @@ impl BitBlock {
 ///
 /// Elements are zigzag-encoded then stored as self-delimiting Elias gamma
 /// bit strings, grouped into blocks of `k` elements each.
-#[derive(Clone, Debug, PartialEq)]
+///
+/// **Note on `PartialEq`:** two arrays are equal when they contain the same
+/// elements in the same order, regardless of `k` or internal block structure.
+/// This means a serde round-trip (which resets `k` to 64) still compares equal.
+#[derive(Clone, Debug)]
 pub struct VarIntArray {
     k: usize,
     blocks: Vec<BitBlock>,
@@ -79,6 +85,7 @@ fn zigzag_decode(z: BigUint) -> BigInt {
 
 fn write_elias_gamma(data: &mut Vec<u8>, bit_len: &mut usize, n: usize) {
     debug_assert!(n >= 1);
+    // k = floor(log2(n)): number of bits in n's representation minus 1
     let k = usize::BITS as usize - n.leading_zeros() as usize - 1;
     for _ in 0..k {
         write_bit(data, bit_len, 0);
@@ -108,7 +115,7 @@ fn read_elias_gamma(data: &[u8], bit_pos: &mut usize) -> usize {
 
 fn write_biguint(data: &mut Vec<u8>, bit_len: &mut usize, z: &BigUint, b: usize) {
     for i in (0..b).rev() {
-        write_bit(data, bit_len, if z.bit(i as u64) { 1 } else { 0 });
+        write_bit(data, bit_len, u8::from(z.bit(i as u64)));
     }
 }
 
@@ -148,6 +155,14 @@ fn decode_block(block: &BitBlock) -> Vec<BigInt> {
         elems.push(decode_one(&block.data, &mut bit_pos));
     }
     elems
+}
+
+fn reencode_block(elems: &[BigInt]) -> BitBlock {
+    let mut block = BitBlock::empty();
+    for elem in elems {
+        encode_into(&mut block, elem);
+    }
+    block
 }
 
 impl VarIntArray {
@@ -197,11 +212,7 @@ impl VarIntArray {
         let block_idx = i / self.k;
         let mut elems = decode_block(&self.blocks[block_idx]);
         elems[i % self.k] = v;
-        let mut new_block = BitBlock::empty();
-        for elem in &elems {
-            encode_into(&mut new_block, elem);
-        }
-        self.blocks[block_idx] = new_block;
+        self.blocks[block_idx] = reencode_block(&elems);
         Ok(())
     }
 
@@ -223,11 +234,7 @@ impl VarIntArray {
         if elems.is_empty() {
             self.blocks.pop();
         } else {
-            let last = self.blocks.last_mut().unwrap();
-            *last = BitBlock::empty();
-            for elem in &elems {
-                encode_into(last, elem);
-            }
+            *self.blocks.last_mut().unwrap() = reencode_block(&elems);
         }
         self.length -= 1;
         Ok(ret)
@@ -298,6 +305,7 @@ impl VarIntArray {
         Some(it.fold(first, |a, b| if b > a { b } else { a }))
     }
 
+    /// Returns `None` if empty, or `NaN` if the sum cannot be represented as `f64`.
     pub fn average(&self) -> Option<f64> {
         if self.length == 0 {
             return None;
@@ -331,6 +339,12 @@ impl<'a> Iterator for VarIntIter<'a> {
 }
 
 impl ExactSizeIterator for VarIntIter<'_> {}
+
+impl PartialEq for VarIntArray {
+    fn eq(&self, other: &Self) -> bool {
+        self.length == other.length && self.iter().eq(other.iter())
+    }
+}
 
 impl fmt::Display for VarIntArray {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -366,7 +380,7 @@ impl<'de> Visitor<'de> for VarIntArrayVisitor {
     where
         A: SeqAccess<'de>,
     {
-        let mut arr = VarIntArray::new(64)
+        let mut arr = VarIntArray::new(DEFAULT_K)
             .map_err(|e| serde::de::Error::custom(e.to_string()))?;
         while let Some(s) = seq.next_element::<String>()? {
             let v: BigInt = s
