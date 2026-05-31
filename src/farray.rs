@@ -38,10 +38,8 @@ pub struct FloatIter<'a> {
 }
 
 fn validate_params(exp_bits: usize, man_bits: usize) -> Result<(), ArrayError> {
-    if exp_bits < 2
-        || exp_bits > 11
-        || man_bits < 1
-        || man_bits > 52
+    if !(2..=11).contains(&exp_bits)
+        || !(1..=52).contains(&man_bits)
         || 1 + exp_bits + man_bits > 64
     {
         return Err(ArrayError::InvalidRange);
@@ -160,7 +158,7 @@ impl FloatArray {
     pub fn new_with_iter(
         exp_bits: usize,
         man_bits: usize,
-        vals: impl Iterator<Item = f64>,
+        vals: impl IntoIterator<Item = f64>,
     ) -> Result<Self, ArrayError> {
         let mut arr = Self::new(exp_bits, man_bits, 0)?;
         arr.extend(vals)?;

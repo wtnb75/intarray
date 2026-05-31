@@ -55,6 +55,13 @@ fn new_with_vec() {
     assert_eq!(arr.len(), 3);
 }
 
+#[test]
+fn new_with_iter() {
+    let arr = FloatArray::new_with_iter(8, 23, [1.0f64, 2.0, 3.0]).unwrap();
+    assert_eq!(arr.len(), 3);
+    assert_eq!(arr.get(1).unwrap(), 2.0);
+}
+
 // --- get / set ---
 
 #[test]
@@ -193,6 +200,18 @@ fn extend_array_slow_path_different_format() {
     b.extend_array(&a).unwrap();
     assert_eq!(b.len(), 2);
     assert!((b.get(0).unwrap() - 1.0).abs() < 1e-3);
+}
+
+#[test]
+fn extend_array_slow_path_same_format_unaligned() {
+    // bpu=4 for FLOAT16; 3 elements is not word-aligned → slow path
+    let (e, m) = FLOAT16;
+    let a = FloatArray::new_with_vec(e, m, vec![1.0, 2.0]).unwrap();
+    let mut b = FloatArray::new_with_vec(e, m, vec![0.5, 0.25, 0.125]).unwrap(); // len=3, not multiple of bpu=4
+    b.extend_array(&a).unwrap();
+    assert_eq!(b.len(), 5);
+    assert!((b.get(3).unwrap() - 1.0).abs() < 1e-3);
+    assert!((b.get(4).unwrap() - 2.0).abs() < 1e-3);
 }
 
 // --- statistics ---
