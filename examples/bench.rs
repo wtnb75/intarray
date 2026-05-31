@@ -2,7 +2,6 @@ use clap::{Arg, Command};
 use digest::Digest;
 use intarray::IntArray;
 use sha2::Sha256;
-use std::mem;
 
 fn hash<D: Digest>(input: &str, output: &mut [u8]) {
     let mut hasher = D::new();
@@ -47,10 +46,9 @@ fn main() {
     let mut result: [u8; 32] = [0; 32];
     hash::<Sha256>("hello world", &mut result);
     println!("result={}", hex::encode(result));
-    unsafe {
-        for i in 0..(32 - 8) {
-            let v: u64 = mem::transmute_copy(&result[i]);
-            println!("h[{}]={:x}", i, v);
-        }
+    for i in 0..(32 - 8) {
+        let bytes: [u8; 8] = result[i..i + 8].try_into().unwrap();
+        let v = u64::from_le_bytes(bytes);
+        println!("h[{}]={:x}", i, v);
     }
 }
