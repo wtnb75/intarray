@@ -401,6 +401,81 @@ fn serde_round_trip_eq() {
     assert_eq!(orig, loaded);
 }
 
+// --- cross-block get/set ---
+
+#[test]
+fn set_cross_block() {
+    let mut arr = RatioArray::new_with_vec(2, vec![ri(1), ri(2), ri(3), ri(4)]).unwrap();
+    arr.set(2, r(1, 2)).unwrap(); // first element of block 1
+    assert_eq!(arr.get(0).unwrap(), ri(1));
+    assert_eq!(arr.get(1).unwrap(), ri(2));
+    assert_eq!(arr.get(2).unwrap(), r(1, 2));
+    assert_eq!(arr.get(3).unwrap(), ri(4));
+}
+
+#[test]
+fn get_last_of_non_final_block() {
+    let arr = RatioArray::new_with_vec(2, vec![ri(10), ri(20), ri(30), ri(40)]).unwrap();
+    assert_eq!(arr.get(1).unwrap(), ri(20)); // last element of block 0
+    assert_eq!(arr.get(2).unwrap(), ri(30)); // first element of block 1
+}
+
+// --- k=0 through constructors ---
+
+#[test]
+fn new_with_vec_k_zero() {
+    assert_eq!(RatioArray::new_with_vec(0, vec![ri(1)]), Err(ArrayError::InvalidRange));
+}
+
+#[test]
+fn new_with_iter_k_zero() {
+    assert_eq!(RatioArray::new_with_iter(0, [ri(1)]), Err(ArrayError::InvalidRange));
+}
+
+// --- single-element stats ---
+
+#[test]
+fn sum_single_element() {
+    let arr = RatioArray::new_with_vec(4, vec![r(3, 5)]).unwrap();
+    assert_eq!(arr.sum().unwrap(), r(3, 5));
+}
+
+#[test]
+fn min_max_single_element() {
+    let arr = RatioArray::new_with_vec(4, vec![r(3, 7)]).unwrap();
+    assert_eq!(arr.min().unwrap(), r(3, 7));
+    assert_eq!(arr.max().unwrap(), r(3, 7));
+}
+
+#[test]
+fn average_single_element() {
+    let arr = RatioArray::new_with_vec(4, vec![r(3, 5)]).unwrap();
+    assert_eq!(arr.average().unwrap(), r(3, 5));
+}
+
+// --- misc edge cases ---
+
+#[test]
+fn extend_empty_iter() {
+    let mut arr = RatioArray::new(4).unwrap();
+    arr.extend(std::iter::empty::<Ratio<BigInt>>()).unwrap();
+    assert_eq!(arr.len(), 0);
+    assert_eq!(arr.block_count(), 0);
+}
+
+#[test]
+fn serde_non_string_element_error() {
+    use serde_json;
+    let result: Result<RatioArray, _> = serde_json::from_str("[42]");
+    assert!(result.is_err());
+}
+
+#[test]
+fn display_empty() {
+    let arr = RatioArray::new(4).unwrap();
+    assert_eq!(arr.to_string(), "[k=4][0]=");
+}
+
 // --- datasize ---
 
 #[test]

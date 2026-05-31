@@ -1,3 +1,4 @@
+mod bits;
 mod core;
 mod error;
 mod farray;
