@@ -1,4 +1,5 @@
 use super::*;
+use crate::error::ArrayError;
 use log::info;
 use serde_derive::Serialize;
 use serde_json;
@@ -106,15 +107,14 @@ fn extend_fast() {
     assert_eq!(v3.length, 138);
     assert_eq!(v3.sum().unwrap(), 0);
 
-    // fast path with non-zero values: previously data.extend() appended after resize-allocated
-    // zero slots, so get() returned zeros and sum() double-counted
+    // fast path with non-zero values
     let mut v5 = IntArray::new_with_iter(2, [0, 1, 2, 3].iter().cycle().take(32).map(|&x| x));
     let v6 = IntArray::new_with_iter(2, [1, 2, 3, 0].iter().cycle().take(32).map(|&x| x));
     let expected_sum = v5.sum().unwrap() + v6.sum().unwrap();
     v5.extend_array(&v6).unwrap();
     assert_eq!(v5.length, 64);
     assert_eq!(v5.sum().unwrap(), expected_sum);
-    assert_eq!(v5.get(32).unwrap(), 1); // first element of appended data visible
+    assert_eq!(v5.get(32).unwrap(), 1);
 }
 
 #[test]
@@ -286,9 +286,9 @@ fn limit_incdec() {
     assert_eq!(v.get(1).unwrap(), 2);
     v.incr_limit(1);
     assert_eq!(v.get(1).unwrap(), 3);
-    v.incr_limit(1);  // already at max=3, no change
+    v.incr_limit(1); // already at max=3, no change
     assert_eq!(v.get(1).unwrap(), 3);
-    v.decr_limit(1);  // 3 > 0, so decrement to 2
+    v.decr_limit(1); // 3 > 0, so decrement to 2
     assert_eq!(v.get(1).unwrap(), 2);
 }
 
@@ -319,14 +319,14 @@ fn pushpop() {
 #[test]
 fn push_too_large() {
     let mut v = IntArray::new(2, 0); // max value = 3
-    assert_eq!(v.push(4), Err(IntArrayError::TooLarge));
+    assert_eq!(v.push(4), Err(ArrayError::TooLarge));
     assert_eq!(v.length, 0); // array must not grow on failure
 }
 
 #[test]
 fn extend_too_large() {
     let mut v = IntArray::new(2, 0); // max value = 3
-    assert_eq!(v.extend(vec![1u64, 2, 4]), Err(IntArrayError::TooLarge));
+    assert_eq!(v.extend(vec![1u64, 2, 4]), Err(ArrayError::TooLarge));
     assert_eq!(v.length, 0); // atomic: array unchanged on error
 }
 
@@ -335,10 +335,9 @@ fn extend_array_too_large() {
     // slow path (different bit widths): atomic rollback on error
     let mut dst = IntArray::new(2, 0); // max value = 3
     let src = IntArray::new_with_vec(4, vec![1, 2, 5]); // 5 > 3
-    assert_eq!(dst.extend_array(&src), Err(IntArrayError::TooLarge));
+    assert_eq!(dst.extend_array(&src), Err(ArrayError::TooLarge));
     assert_eq!(dst.length, 0); // atomic: array unchanged on error
 }
-
 
 #[test]
 fn max_min_empty() {
@@ -361,7 +360,6 @@ fn cat() {
 fn shape() {
     let v1 = IntArray::new_with_vec(10, vec![0, 1, 2, 0, 1, 2]);
     let v2 = v1.shape(3);
-    // assert_eq!(v2.length, v1.length);
     assert_eq!(v2.bits, 3);
     assert_eq!(v2.len(), v1.len());
     let v3 = v1.shape_auto();
@@ -428,8 +426,7 @@ fn test_subarray() {
     assert_eq!(v4.sum().unwrap(), 261);
     assert_eq!(v4.length, 18);
 
-    // fast path with partial last word (was masking in the wrong direction)
-    // bits=8 -> bpd=8; offset=0 (aligned), length=3 (3 % 8 != 0 -> partial last word)
+    // fast path with partial last word
     let v5 = IntArray::new_with_iter(8, 0..20u64);
     let v6 = v5.subarray(0, 3);
     assert_eq!(v6.length, 3);
@@ -438,7 +435,6 @@ fn test_subarray() {
     assert_eq!(v6.get(2).unwrap(), 2);
 
     // fast path with non-zero aligned offset + partial last word
-    // bits=8, bpd=8; offset=8 (8 % 8 == 0), length=3 -> partial last word in source word[1]
     let v7 = IntArray::new_with_iter(8, 0..20u64);
     let v8 = v7.subarray(8, 3);
     assert_eq!(v8.length, 3);
@@ -456,8 +452,6 @@ fn fill_random_empty() {
 
 #[test]
 fn fill_random_single_word() {
-    // length=1 means data.len()==1: the bulk loop (0..0) is empty,
-    // only the tail loop runs. Previously would have underflowed.
     let mut v = IntArray::new(8, 1);
     v.fill_random();
     assert_eq!(v.length, 1);
@@ -470,9 +464,8 @@ fn iter_count_after_consume() {
     let mut iter = v.iter();
     iter.next();
     iter.next();
-    assert_eq!(iter.count(), 3); // 5 total - 2 consumed = 3 remaining
+    assert_eq!(iter.count(), 3);
 
-    // fully consumed iterator must return 0, not total length
     let v2 = IntArray::new_with_vec(4, vec![0, 1, 2]);
     let mut iter2 = v2.iter();
     for _ in 0..3 {
@@ -484,47 +477,43 @@ fn iter_count_after_consume() {
 #[test]
 fn shape_auto_empty() {
     let v = IntArray::new(4, 0);
-    let v2 = v.shape_auto(); // must not panic on empty array
+    let v2 = v.shape_auto();
     assert_eq!(v2.length, 0);
-    assert_eq!(v2.bits, 1); // minimum valid bits for empty array
+    assert_eq!(v2.bits, 1);
 }
 
 #[test]
 fn error_types() {
     let mut v = IntArray::new(4, 3);
-    assert_eq!(v.get(10), Err(IntArrayError::OutOfBounds));
-    assert_eq!(v.set(10, 0), Err(IntArrayError::OutOfBounds));
-    assert_eq!(v.set(0, 100), Err(IntArrayError::TooLarge));
+    assert_eq!(v.get(10), Err(ArrayError::OutOfBounds));
+    assert_eq!(v.set(10, 0), Err(ArrayError::OutOfBounds));
+    assert_eq!(v.set(0, 100), Err(ArrayError::TooLarge));
 
     let mut empty = IntArray::new(4, 0);
-    assert_eq!(empty.pop(), Err(IntArrayError::Empty));
+    assert_eq!(empty.pop(), Err(ArrayError::Empty));
 
-    // add/sub/incr/decr error propagation
     let mut v2 = IntArray::new(4, 3);
-    assert_eq!(v2.add(10, 1), Err(IntArrayError::OutOfBounds));
-    assert_eq!(v2.sub(10, 1), Err(IntArrayError::OutOfBounds));
-    assert_eq!(v2.incr(10), Err(IntArrayError::OutOfBounds));
-    assert_eq!(v2.decr(10), Err(IntArrayError::OutOfBounds));
-    // overflow → TooLarge, underflow → TooSmall
+    assert_eq!(v2.add(10, 1), Err(ArrayError::OutOfBounds));
+    assert_eq!(v2.sub(10, 1), Err(ArrayError::OutOfBounds));
+    assert_eq!(v2.incr(10), Err(ArrayError::OutOfBounds));
+    assert_eq!(v2.decr(10), Err(ArrayError::OutOfBounds));
     v2.set(0, 15).unwrap(); // max for 4-bit
-    assert_eq!(v2.add(0, 1), Err(IntArrayError::TooLarge));
-    assert_eq!(v2.incr(0), Err(IntArrayError::TooLarge));
+    assert_eq!(v2.add(0, 1), Err(ArrayError::TooLarge));
+    assert_eq!(v2.incr(0), Err(ArrayError::TooLarge));
     v2.set(0, 0).unwrap();
-    assert_eq!(v2.sub(0, 1), Err(IntArrayError::TooSmall));
-    assert_eq!(v2.decr(0), Err(IntArrayError::TooSmall));
+    assert_eq!(v2.sub(0, 1), Err(ArrayError::TooSmall));
+    assert_eq!(v2.decr(0), Err(ArrayError::TooSmall));
 }
 
 #[test]
 fn extend_into_iter() {
     let mut v = IntArray::new(4, 0);
-    // IntoIterator: pass a Vec directly (not .iter())
     v.extend(vec![1u64, 2, 3]).unwrap();
     assert_eq!(v.length, 3);
     assert_eq!(v.get(0).unwrap(), 1);
     assert_eq!(v.get(1).unwrap(), 2);
     assert_eq!(v.get(2).unwrap(), 3);
 
-    // IntoIterator: pass a range
     v.extend(4u64..7).unwrap();
     assert_eq!(v.length, 6);
     assert_eq!(v.get(3).unwrap(), 4);
@@ -660,19 +649,16 @@ fn deserialize_empty() {
     assert_eq!(v2.bits, 1);
 }
 
-// Bit width is NOT preserved: it is re-inferred from the max value.
-// A bits=8 array with max value 7 (fits in 3 bits) deserializes as bits=3.
 #[test]
 fn deserialize_bits_inferred() {
     let mut v = IntArray::new(8, 3);
     v.set(0, 1).unwrap();
     v.set(1, 2).unwrap();
-    v.set(2, 7).unwrap(); // max = 7, ffs(7) = 3 → bits=3, not 8
+    v.set(2, 7).unwrap();
     let json = serde_json::to_string(&v).unwrap();
     let v2: IntArray = serde_json::from_str(&json).unwrap();
     assert_eq!(v2.bits, 3);
     assert_eq!(v2.get(2).unwrap(), 7);
-    // write up to the re-inferred capacity (max = 7 for 3-bit)
     v2.clone().set(0, 7).unwrap();
 }
 
@@ -698,21 +684,3 @@ fn deserialize_all_zeros() {
         assert_eq!(v2.get(i).unwrap(), 0);
     }
 }
-
-/*
-    #[bench]
-    fn getbench1(b: &mut Bencher) {
-        let mut v = IntArray::new(1, 1024 * 1024);
-        for i in 0..v.length {
-            if i % 2 == 0 {
-                continue;
-            }
-            v.set(i, 1);
-        }
-        b.iter(|| {
-            for i in 0..v.length / 3 {
-                v.get(i * 3);
-            }
-        })
-    }
-*/
