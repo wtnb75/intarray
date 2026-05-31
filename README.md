@@ -59,6 +59,7 @@ All access methods return `Result<_, IntArrayError>`:
 |---|---|
 | `OutOfBounds` | index ≥ length |
 | `TooLarge` | value exceeds 2^bits − 1 |
+| `TooSmall` | `sub`/`decr` would go below 0 |
 | `Empty` | `pop()` on empty array |
 
 ```rust
@@ -82,12 +83,12 @@ v.sub(5, 3).unwrap();              // v[5] -= 3
 
 ```rust
 v.incr_limit(5);  // → Some(old_value) if v[5] < max, None if already at max
-v.decr_limit(5);  // → Some(old_value) if v[5] > 0, None if already at 0 or max
+v.decr_limit(5);  // → Some(old_value) if v[5] > 0, None if already at 0
 ```
 
 ## Bulk operations
 
-`push`, `extend`, `extend_array`, and `concat` are all atomic: on error, the array is left unchanged.
+`push`, `extend`, and `extend_array` are all atomic: on error, the array is left unchanged.
 
 ```rust
 let mut v = IntArray::new(4, 0);
@@ -97,11 +98,7 @@ v.extend(vec![1u64, 2, 3]).unwrap();
 
 // Extend from another IntArray (fast path when bits and alignment match)
 let other = IntArray::new_with_vec(4, vec![4, 5, 6]);
-v.extend_array(other).unwrap();
-
-// concat is an alias for extend_array
-let more = IntArray::new_with_vec(4, vec![7, 8]);
-v.concat(more).unwrap();
+v.extend_array(&other).unwrap();
 ```
 
 ## Arithmetic operators
@@ -113,7 +110,7 @@ let mut a = IntArray::new_with_vec(8, vec![10, 20, 30]);
 a += 5u64;   // [15, 25, 35]
 
 let b = IntArray::new_with_vec(8, vec![1, 2, 3]);
-a += b;      // [16, 27, 38]
+a += &b;     // [16, 27, 38]  (&b なので b は消費されない)
 ```
 
 ## Iteration and statistics
@@ -123,7 +120,7 @@ let v = IntArray::new_with_vec(8, vec![3, 1, 4, 1, 5, 9]);
 
 for x in v.iter() { println!("{}", x); }
 
-v.sum().unwrap();      // → 23
+v.sum().unwrap();      // → 23u128
 v.min().unwrap();      // → 1
 v.max().unwrap();      // → 9
 v.average().unwrap();  // → 3.8333...
