@@ -1,30 +1,35 @@
 # intarray
 
-Memory-efficient packed integer arrays for Rust.
+Memory-efficient packed arrays for Rust. Five types covering unsigned integers, signed integers, floating-point, arbitrary-precision integers, and exact rationals — all with no per-element heap allocation.
 
 - **`IntArray`** — N-bit unsigned integers packed into `Vec<u64>`. Store 1–64 bits per element with no per-element overhead.
 - **`RadixArray`** — Signed integers in an arbitrary range `[A, B]`, packed using mixed-radix encoding. Maximizes elements per 64-bit word for any value range.
+- **`FloatArray`** — Floating-point values stored at a custom bit precision (exponent + mantissa bits). Supports FLOAT16, BFLOAT16, FLOAT32, FLOAT64, and any user-defined format.
+- **`VarIntArray`** — Arbitrary-precision integers (`num_bigint::BigInt`) compressed with Elias gamma + zigzag encoding. Block-based storage for random access.
+- **`RatioArray`** — Exact rational numbers (`num_rational::Ratio<BigInt>`) with no rounding error. Numerator and denominator are each Elias-gamma encoded.
 
 ## When to use
 
-| | `IntArray` | `RadixArray` |
-|---|---|---|
-| Value type | `u64` (unsigned) | `i64` (signed) |
-| Range constraint | 1–64 bits | any `[A, B]` |
-| Best for | bit-width known at design time | range known at runtime |
+| | `IntArray` | `RadixArray` | `FloatArray` | `VarIntArray` | `RatioArray` |
+|---|---|---|---|---|---|
+| Value type | `u64` | `i64` | `f64` | `BigInt` | `Ratio<BigInt>` |
+| Precision | fixed bits | fixed range | custom exp+man | arbitrary | arbitrary |
+| Bounded values | yes | yes | no | no | no |
+| Exact arithmetic | — | — | no | yes | yes |
+| Best for | bit-width known at design time | range known at runtime | compact floats | large unbounded ints | rounding-free rationals |
 
-Both types: memory is the bottleneck, values are bounded, no per-element allocation.
+All types: memory is the bottleneck, no per-element heap allocation.
 
 ## Installation
 
 ```toml
 [dependencies]
-intarray = "0.3"
+intarray = "0.4"
 ```
 
 ## Error type
 
-Both types share a single error enum:
+All types share a single error enum:
 
 ```rust
 pub enum ArrayError {
@@ -32,7 +37,7 @@ pub enum ArrayError {
     TooLarge,      // value exceeds upper bound
     TooSmall,      // value is below lower bound
     Empty,         // pop() on empty array
-    InvalidRange,  // RadixArray: K < 2 or K > u64::MAX
+    InvalidRange,  // invalid construction parameters
 }
 ```
 
@@ -262,25 +267,294 @@ v.datasize();      // total size in bytes
 
 ---
 
+## FloatArray
+
+Stores `f64` values at a reduced precision defined by `(exp_bits, man_bits)`. Each value is re-encoded into the custom format on write and decoded back to `f64` on read. Four predefined formats are provided as constants.
+
+| Constant | exp | man | total bits | notes |
+|---|---|---|---|---|
+| `FLOAT64` | 11 | 52 | 64 | standard `f64` |
+| `FLOAT32` | 8 | 23 | 32 | standard `f32` |
+| `FLOAT16` | 5 | 10 | 16 | IEEE 754 half |
+| `BFLOAT16` | 8 | 7 | 16 | Google Brain float |
+
+### Quick start
+
+```rust
+use intarray::{FloatArray, FLOAT32};
+
+// 32-bit floats, block size 64
+let mut v = FloatArray::new(FLOAT32.0, FLOAT32.1, 0).unwrap();
+
+v.push(3.14).unwrap();
+v.push(-1.0).unwrap();
+assert!((v.get(0).unwrap() - 3.14f64).abs() < 1e-6);
+
+v.sum().unwrap();      // → ~2.14
+v.min().unwrap();      // → ~-1.0
+v.average().unwrap();  // → ~1.07
+```
+
+### Construction
+
+```rust
+use intarray::{FloatArray, FLOAT16, FLOAT32, FLOAT64, BFLOAT16};
+
+// Using a predefined format
+let v = FloatArray::new(FLOAT32.0, FLOAT32.1, 100).unwrap();
+
+// Custom format: 6-bit exponent, 9-bit mantissa (16 bits total)
+let v = FloatArray::new(6, 9, 0).unwrap();
+
+// From a Vec
+let v = FloatArray::new_with_vec(FLOAT32.0, FLOAT32.1, vec![1.0, 2.0, 3.0]).unwrap();
+
+// From an iterator
+let v = FloatArray::new_with_iter(FLOAT16.0, FLOAT16.1, [0.5, 1.0, 1.5]).unwrap();
+```
+
+### Element access
+
+```rust
+let mut v = FloatArray::new(FLOAT32.0, FLOAT32.1, 4).unwrap();
+
+v.set(0, 1.5).unwrap();
+v.get(0).unwrap();         // → ~1.5
+v.push(42.0).unwrap();     // append, returns new index
+v.pop().unwrap();          // remove last, returns value
+```
+
+### Iteration and statistics
+
+```rust
+let v = FloatArray::new_with_vec(FLOAT32.0, FLOAT32.1, vec![1.0, 2.0, 3.0]).unwrap();
+
+for x in v.iter() { println!("{}", x); }
+
+v.sum().unwrap();      // → ~6.0
+v.min().unwrap();      // → ~1.0
+v.max().unwrap();      // → ~3.0
+v.average().unwrap();  // → ~2.0
+```
+
+### Metadata
+
+```rust
+v.len();
+v.bits_per_unit();    // = 1 + exp_bits + man_bits
+v.datasize();         // total size in bytes
+```
+
+---
+
+## VarIntArray
+
+Stores arbitrary-precision signed integers (`num_bigint::BigInt`) using Elias gamma + zigzag encoding. Elements are grouped into blocks of `k` for O(1) amortized `push` and O(k) `get`/`set`.
+
+Memory usage scales with the actual values stored: small values (near zero) use fewer bits.
+
+### Quick start
+
+```rust
+use intarray::VarIntArray;
+use num_bigint::BigInt;
+
+let mut v = VarIntArray::new(64).unwrap();  // block size = 64
+
+v.push(BigInt::from(0)).unwrap();
+v.push(BigInt::from(-1)).unwrap();
+v.push(BigInt::from(i64::MAX)).unwrap();
+v.push("123456789012345678901234567890".parse::<BigInt>().unwrap()).unwrap();
+
+assert_eq!(v.get(1).unwrap(), BigInt::from(-1));
+assert_eq!(v.len(), 4);
+```
+
+### Construction
+
+```rust
+use num_bigint::BigInt;
+
+let v = VarIntArray::new(64).unwrap();
+
+let v = VarIntArray::new_with_vec(32, vec![
+    BigInt::from(1),
+    BigInt::from(-2),
+    BigInt::from(1000),
+]).unwrap();
+
+let v = VarIntArray::new_with_iter(64, (0i64..100).map(BigInt::from)).unwrap();
+```
+
+### Element access
+
+```rust
+let mut v = VarIntArray::new_with_vec(4, vec![
+    BigInt::from(1), BigInt::from(2), BigInt::from(3),
+]).unwrap();
+
+v.get(0).unwrap();                        // → BigInt::from(1)
+v.set(1, BigInt::from(-99)).unwrap();     // decode block, replace, re-encode
+v.push(BigInt::from(42)).unwrap();        // append
+v.pop().unwrap();                         // remove last
+```
+
+### Iteration and statistics
+
+```rust
+let v = VarIntArray::new_with_vec(64, vec![
+    BigInt::from(10), BigInt::from(-3), BigInt::from(7),
+]).unwrap();
+
+for x in v.iter() { println!("{}", x); }
+
+v.sum().unwrap();      // → BigInt::from(14)
+v.min().unwrap();      // → BigInt::from(-3)
+v.max().unwrap();      // → BigInt::from(10)
+v.average().unwrap();  // → ~4.666... (f64, None if empty)
+```
+
+### Metadata
+
+```rust
+v.len();
+v.block_size();    // k
+v.block_count();   // number of blocks
+v.datasize();      // total size in bytes
+```
+
+---
+
+## RatioArray
+
+Stores exact rational numbers (`num_rational::Ratio<BigInt>`) with no rounding error. The numerator is zigzag + Elias gamma encoded; the denominator (always ≥ 1) uses standard Elias gamma. Integers (denominator = 1) cost only 1 extra bit over `VarIntArray`.
+
+`average()` returns an exact `Ratio<BigInt>`, not a float.
+
+### Quick start
+
+```rust
+use intarray::RatioArray;
+use num_bigint::BigInt;
+use num_rational::Ratio;
+
+let mut v = RatioArray::new(64).unwrap();
+
+v.push(Ratio::from_integer(BigInt::from(0))).unwrap();
+v.push(Ratio::new(BigInt::from(1), BigInt::from(2))).unwrap();   // 1/2
+v.push(Ratio::new(BigInt::from(-1), BigInt::from(3))).unwrap();  // -1/3
+v.push(Ratio::new(BigInt::from(22), BigInt::from(7))).unwrap();  // 22/7
+
+assert_eq!(v.get(1).unwrap(), Ratio::new(BigInt::from(1), BigInt::from(2)));
+assert_eq!(v.len(), 4);
+```
+
+### Construction
+
+```rust
+use num_bigint::BigInt;
+use num_rational::Ratio;
+
+let v = RatioArray::new(64).unwrap();
+
+let v = RatioArray::new_with_vec(32, vec![
+    Ratio::from_integer(BigInt::from(1)),
+    Ratio::new(BigInt::from(1), BigInt::from(2)),
+]).unwrap();
+
+let v = RatioArray::new_with_iter(64, [
+    Ratio::from_integer(BigInt::from(0)),
+    Ratio::new(BigInt::from(3), BigInt::from(4)),
+]).unwrap();
+```
+
+### Element access
+
+```rust
+let mut v = RatioArray::new_with_vec(4, vec![
+    Ratio::from_integer(BigInt::from(1)),
+    Ratio::from_integer(BigInt::from(2)),
+]).unwrap();
+
+v.get(0).unwrap();    // → 1/1
+v.set(0, Ratio::new(BigInt::from(3), BigInt::from(7))).unwrap();
+v.push(Ratio::new(BigInt::from(1), BigInt::from(6))).unwrap();
+v.pop().unwrap();
+```
+
+### Iteration and statistics
+
+```rust
+use num_bigint::BigInt;
+use num_rational::Ratio;
+
+let v = RatioArray::new_with_vec(4, vec![
+    Ratio::new(BigInt::from(1), BigInt::from(2)),   // 1/2
+    Ratio::new(BigInt::from(1), BigInt::from(3)),   // 1/3
+    Ratio::new(BigInt::from(1), BigInt::from(6)),   // 1/6
+]).unwrap();
+
+for x in v.iter() { println!("{}", x); }
+
+v.sum().unwrap();      // → Ratio = 1  (exact: 1/2 + 1/3 + 1/6 = 1)
+v.min().unwrap();      // → 1/6
+v.max().unwrap();      // → 1/2
+v.average().unwrap();  // → Ratio = 1/3  (exact, no float rounding)
+```
+
+### Metadata
+
+```rust
+v.len();
+v.block_size();    // k
+v.block_count();   // number of blocks
+v.datasize();      // total size in bytes
+```
+
+---
+
 ## Serialization (serde)
 
-Both types serialize as flat sequences.
+All types serialize as flat sequences. Internal parameters (bit width, range, block size) are not preserved; they are re-inferred or reset to defaults on deserialization.
 
 ```rust
 use serde_json;
 
-// IntArray → [u64, ...]
+// IntArray → JSON array of u64
 let v = IntArray::new_with_vec(4, vec![1u64, 2, 3]).unwrap();
 let json = serde_json::to_string(&v).unwrap();   // "[1,2,3]"
 let v2: IntArray = serde_json::from_str(&json).unwrap();
 // Bit width re-inferred from max value on deserialize.
 
-// RadixArray → [i64, ...]
+// RadixArray → JSON array of i64
 let r = RadixArray::new_with_vec(-5, 5, vec![-1i64, 0, 2]).unwrap();
 let json = serde_json::to_string(&r).unwrap();   // "[-1,0,2]"
 let r2: RadixArray = serde_json::from_str(&json).unwrap();
 // Range [A, B] re-inferred from min/max on deserialize.
+
+// FloatArray → JSON array of f64
+let f = FloatArray::new_with_vec(FLOAT32.0, FLOAT32.1, vec![1.0, 2.0]).unwrap();
+let json = serde_json::to_string(&f).unwrap();   // "[1.0,2.0]"
+let f2: FloatArray = serde_json::from_str(&json).unwrap();
+// Format defaults to FLOAT64 on deserialize.
+
+// VarIntArray → JSON array of decimal strings (arbitrary precision)
+let vi = VarIntArray::new_with_vec(4, vec![BigInt::from(-1), BigInt::from(2)]).unwrap();
+let json = serde_json::to_string(&vi).unwrap();  // "["-1","2"]"
+let vi2: VarIntArray = serde_json::from_str(&json).unwrap();
+// Block size k defaults to 64 on deserialize.
+
+// RatioArray → JSON array of "p/q" strings (integers as "p")
+let ra = RatioArray::new_with_vec(4, vec![
+    Ratio::new(BigInt::from(1), BigInt::from(2)),
+    Ratio::from_integer(BigInt::from(-3)),
+]).unwrap();
+let json = serde_json::to_string(&ra).unwrap();  // "["1/2","-3"]"
+let ra2: RatioArray = serde_json::from_str(&json).unwrap();
+// Block size k defaults to 64 on deserialize.
 ```
+
+`PartialEq` for `VarIntArray` and `RatioArray` compares elements only (ignoring block size `k`), so a serde round-trip always compares equal.
 
 ## MSRV
 
