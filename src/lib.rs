@@ -11,6 +11,7 @@ use std::{cmp, fmt, mem};
 pub enum IntArrayError {
     OutOfBounds,
     TooLarge,
+    TooSmall,
     Empty,
 }
 
@@ -19,6 +20,7 @@ impl fmt::Display for IntArrayError {
         match self {
             Self::OutOfBounds => write!(f, "index out of bounds"),
             Self::TooLarge => write!(f, "value too large for bit width"),
+            Self::TooSmall => write!(f, "value would underflow"),
             Self::Empty => write!(f, "array is empty"),
         }
     }
@@ -279,7 +281,7 @@ impl IntArray {
         res
     }
 
-    pub fn datasize(self) -> usize {
+    pub fn datasize(&self) -> usize {
         mem::size_of::<IntArray>() + (ELEMENT_BITS / 8) * self.data.capacity()
     }
 
@@ -314,13 +316,13 @@ impl IntArray {
         Ok(())
     }
 
-    pub fn extend_array(&mut self, vals: IntArray) -> Result<(), IntArrayError> {
+    pub fn extend_array(&mut self, vals: &IntArray) -> Result<(), IntArrayError> {
         let (bpd, _) = IntArray::sizeval(self.bits, 0);
         if vals.bits == self.bits && self.length.is_multiple_of(bpd) {
             // fast path: self is word-aligned, so vals.data slots directly follow
             debug!("fast path: bits={}, length={}", self.bits, self.length);
             self.length += vals.length;
-            self.data.extend(vals.data);
+            self.data.extend_from_slice(&vals.data);
             return Ok(());
         }
         // slow path: bit-width conversion, atomic via extend()
@@ -328,11 +330,7 @@ impl IntArray {
         self.extend(vals.iter())
     }
 
-    pub fn concat(&mut self, vals: IntArray) -> Result<(), IntArrayError> {
-        self.extend_array(vals)
-    }
-
-    pub fn shape(self: &IntArray, bits: usize) -> IntArray {
+    pub fn shape(&self, bits: usize) -> IntArray {
         IntArray::new_with_iter(bits, self.iter())
     }
 
@@ -436,7 +434,7 @@ impl IntArray {
 
     pub fn sub(&mut self, i: usize, v: Element) -> Result<(), IntArrayError> {
         let n = self.get(i)?;
-        let diff = n.checked_sub(v).ok_or(IntArrayError::TooLarge)?;
+        let diff = n.checked_sub(v).ok_or(IntArrayError::TooSmall)?;
         self.set(i, diff)
     }
 
@@ -457,7 +455,7 @@ impl IntArray {
     pub fn decr_limit(&mut self, i: usize) -> Option<Element> {
         match self.get(i) {
             Ok(n) => {
-                if n != 0 && n != self.max_value() {
+                if n != 0 {
                     self.set(i, n - 1).unwrap();
                     Some(n)
                 } else {
@@ -476,20 +474,20 @@ impl IntArray {
         self.sub(i, 1)
     }
 
-    pub fn sum(&self) -> Option<Element> {
-        let mut res = 0;
+    pub fn sum(&self) -> Option<u128> {
         if self.bits > ELEMENT_BITS / 2 {
             return self.sum0();
         }
+        let mut res: u128 = 0;
         for i in self.data.iter() {
-            res += (*i).sum_bits(self.bits).unwrap();
+            res += (*i).sum_bits(self.bits).unwrap() as u128;
             debug!("sum: {} -> {}", *i, res);
         }
         Some(res)
     }
 
-    pub fn sum0(&self) -> Option<Element> {
-        Some(self.iter().fold(0 as Element, |sum, a| sum + a))
+    pub(crate) fn sum0(&self) -> Option<u128> {
+        Some(self.iter().fold(0u128, |sum, a| sum + a as u128))
     }
 
     pub fn fill_random(&mut self) {
@@ -608,8 +606,8 @@ impl AddAssign<Element> for IntArray {
     }
 }
 
-impl AddAssign<IntArray> for IntArray {
-    fn add_assign(&mut self, v: IntArray) {
+impl AddAssign<&'_ IntArray> for IntArray {
+    fn add_assign(&mut self, v: &IntArray) {
         if self.bits == v.bits && self.length == v.length {
             // fast path
             debug!("fast path: bits={}, length={}", self.bits, self.length);
@@ -650,8 +648,8 @@ impl SubAssign<Element> for IntArray {
     }
 }
 
-impl SubAssign<IntArray> for IntArray {
-    fn sub_assign(&mut self, v: IntArray) {
+impl SubAssign<&'_ IntArray> for IntArray {
+    fn sub_assign(&mut self, v: &IntArray) {
         if self.bits == v.bits && self.length == v.length {
             // fast path
             debug!("fast path: bits={}, length={}", self.bits, self.length);

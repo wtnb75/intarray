@@ -96,13 +96,13 @@ fn extend_fast() {
     let mut v1 = IntArray::new(2, 3);
     let v2 = IntArray::new(10, 20);
     // slow path
-    v1.extend_array(v2).unwrap();
+    v1.extend_array(&v2).unwrap();
     assert_eq!(v1.length, 23);
     assert_eq!(v1.sum().unwrap(), 0);
 
     let mut v3 = IntArray::new(2, 128);
     let v4 = IntArray::new(2, 10);
-    v3.extend_array(v4).unwrap();
+    v3.extend_array(&v4).unwrap();
     assert_eq!(v3.length, 138);
     assert_eq!(v3.sum().unwrap(), 0);
 
@@ -111,7 +111,7 @@ fn extend_fast() {
     let mut v5 = IntArray::new_with_iter(2, [0, 1, 2, 3].iter().cycle().take(32).map(|&x| x));
     let v6 = IntArray::new_with_iter(2, [1, 2, 3, 0].iter().cycle().take(32).map(|&x| x));
     let expected_sum = v5.sum().unwrap() + v6.sum().unwrap();
-    v5.extend_array(v6).unwrap();
+    v5.extend_array(&v6).unwrap();
     assert_eq!(v5.length, 64);
     assert_eq!(v5.sum().unwrap(), expected_sum);
     assert_eq!(v5.get(32).unwrap(), 1); // first element of appended data visible
@@ -172,8 +172,8 @@ fn sum_1() {
     for i in 0..v.length {
         v.incr(i).unwrap();
     }
-    assert_eq!(v.sum0().unwrap(), v.length as Element);
-    assert_eq!(v.sum().unwrap(), v.length as Element);
+    assert_eq!(v.sum0().unwrap(), v.length as u128);
+    assert_eq!(v.sum().unwrap(), v.length as u128);
 
     for i in 0..v.length {
         v.add(i, i as Element).unwrap();
@@ -286,10 +286,10 @@ fn limit_incdec() {
     assert_eq!(v.get(1).unwrap(), 2);
     v.incr_limit(1);
     assert_eq!(v.get(1).unwrap(), 3);
-    v.incr_limit(1);
+    v.incr_limit(1);  // already at max=3, no change
     assert_eq!(v.get(1).unwrap(), 3);
-    v.decr_limit(1);
-    assert_eq!(v.get(1).unwrap(), 3);
+    v.decr_limit(1);  // 3 > 0, so decrement to 2
+    assert_eq!(v.get(1).unwrap(), 2);
 }
 
 #[test]
@@ -335,17 +335,10 @@ fn extend_array_too_large() {
     // slow path (different bit widths): atomic rollback on error
     let mut dst = IntArray::new(2, 0); // max value = 3
     let src = IntArray::new_with_vec(4, vec![1, 2, 5]); // 5 > 3
-    assert_eq!(dst.extend_array(src), Err(IntArrayError::TooLarge));
+    assert_eq!(dst.extend_array(&src), Err(IntArrayError::TooLarge));
     assert_eq!(dst.length, 0); // atomic: array unchanged on error
 }
 
-#[test]
-fn concat_too_large() {
-    let mut dst = IntArray::new(2, 0); // max value = 3
-    let src = IntArray::new_with_vec(4, vec![0, 4]); // 4 > 3
-    assert_eq!(dst.concat(src), Err(IntArrayError::TooLarge));
-    assert_eq!(dst.length, 0); // atomic: array unchanged on error
-}
 
 #[test]
 fn max_min_empty() {
@@ -359,7 +352,7 @@ fn max_min_empty() {
 fn cat() {
     let mut v1 = IntArray::new_with_vec(2, vec![0, 1, 2]);
     let v2 = IntArray::new_with_vec(3, vec![0, 1, 2]);
-    v1.concat(v2).unwrap();
+    v1.extend_array(&v2).unwrap();
     assert_eq!(v1.length, 6);
     assert_eq!(v1.get(3).unwrap(), 0);
 }
@@ -396,16 +389,16 @@ fn assign_int() {
 fn assign_array() {
     let mut v1 = IntArray::new_with_vec(10, vec![0, 1, 2, 0, 1, 2]);
     let v2 = IntArray::new_with_vec(10, vec![2, 1, 0, 2, 1, 0]);
-    v1 += v2;
+    v1 += &v2;
     assert_eq!(v1.max(), Some(2));
     assert_eq!(v1.min(), Some(2));
-    v1 -= IntArray::new_with_vec(10, vec![2, 1, 0, 2, 1, 0]);
+    v1 -= &IntArray::new_with_vec(10, vec![2, 1, 0, 2, 1, 0]);
     assert_eq!(v1.get(0).unwrap(), 0);
     assert_eq!(v1.get(2).unwrap(), 2);
-    v1 += IntArray::new_with_vec(3, vec![2, 1, 0, 2, 1, 0]);
+    v1 += &IntArray::new_with_vec(3, vec![2, 1, 0, 2, 1, 0]);
     assert_eq!(v1.max(), Some(2));
     assert_eq!(v1.min(), Some(2));
-    v1 -= IntArray::new_with_vec(5, vec![2, 1, 0, 2, 1, 0, 2]);
+    v1 -= &IntArray::new_with_vec(5, vec![2, 1, 0, 2, 1, 0, 2]);
     assert_eq!(v1.get(0).unwrap(), 0);
     assert_eq!(v1.get(2).unwrap(), 2);
 }
@@ -512,13 +505,13 @@ fn error_types() {
     assert_eq!(v2.sub(10, 1), Err(IntArrayError::OutOfBounds));
     assert_eq!(v2.incr(10), Err(IntArrayError::OutOfBounds));
     assert_eq!(v2.decr(10), Err(IntArrayError::OutOfBounds));
-    // overflow/underflow → TooLarge
+    // overflow → TooLarge, underflow → TooSmall
     v2.set(0, 15).unwrap(); // max for 4-bit
     assert_eq!(v2.add(0, 1), Err(IntArrayError::TooLarge));
     assert_eq!(v2.incr(0), Err(IntArrayError::TooLarge));
     v2.set(0, 0).unwrap();
-    assert_eq!(v2.sub(0, 1), Err(IntArrayError::TooLarge));
-    assert_eq!(v2.decr(0), Err(IntArrayError::TooLarge));
+    assert_eq!(v2.sub(0, 1), Err(IntArrayError::TooSmall));
+    assert_eq!(v2.decr(0), Err(IntArrayError::TooSmall));
 }
 
 #[test]
