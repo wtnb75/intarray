@@ -319,7 +319,11 @@ impl ExactSizeIterator for FloatIter<'_> {}
 
 impl fmt::Display for FloatArray {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "[e{}m{}][{}]=", self.exp_bits, self.man_bits, self.length)?;
+        write!(
+            f,
+            "[e{}m{}][{}]=",
+            self.exp_bits, self.man_bits, self.length
+        )?;
         let s = self
             .iter()
             .map(|x| x.to_string())

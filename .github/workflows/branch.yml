@@ -1,0 +1,28 @@
+# .github/workflows/branch.yml
+name: branch
+
+on:
+  push:
+    branches-ignore: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - uses: wtnb75/actions/rust@v1
+    - uses: wtnb75/actions/cargotest@v1
+      with:
+        html-output-dir: coverage
+    - name: cargo doc
+      run: |
+        cargo doc --no-deps
+        mv target/doc docs
+      shell: bash
+    - uses: wtnb75/actions/merge-pages@v1
+      with:
+        dirs: "docs coverage"

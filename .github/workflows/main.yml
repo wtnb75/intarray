@@ -1,0 +1,44 @@
+# .github/workflows/main.yml
+name: main
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - uses: wtnb75/actions/rust@v1
+    - uses: wtnb75/actions/cargotest@v1
+      with:
+        html-output-dir: coverage
+    - name: cargo doc
+      run: |
+        cargo doc --no-deps
+        mv target/doc docs
+      shell: bash
+    - uses: wtnb75/actions/merge-pages@v1
+      with:
+        dirs: "docs coverage"
+    - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+  deploy:
+    needs: build
+    if: github.ref_name == 'master'
+    permissions:
+      pages: write
+      id-token: write
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - name: deploy pages
+      id: deployment
+      uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

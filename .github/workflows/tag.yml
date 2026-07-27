@@ -1,0 +1,23 @@
+# .github/workflows/tag.yml
+name: tag
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - name: versioning
+      run: sed -i "s/^version = .*/version = \"${GITHUB_REF##*/v}\"/" Cargo.toml
+      shell: bash
+    - uses: wtnb75/actions/rust@v1
+    - uses: wtnb75/actions/cargotest@v1
+    - uses: wtnb75/actions/crates-publish@v1
+      with:
+        token: ${{ secrets.CARGO_REGISTRY_TOKEN }}

@@ -12,7 +12,11 @@ pub(crate) struct BitBlock {
 
 impl BitBlock {
     pub(crate) fn empty() -> Self {
-        BitBlock { data: vec![], bit_len: 0, count: 0 }
+        BitBlock {
+            data: vec![],
+            bit_len: 0,
+            count: 0,
+        }
     }
 }
 

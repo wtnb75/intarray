@@ -67,7 +67,9 @@ pub(crate) fn calc_epu(base: u64) -> usize {
     let approx = (64.0 * std::f64::consts::LN_2 / (base as f64).ln()) as usize;
     let mut epu = approx.max(1);
     loop {
-        let next = (base as u128).checked_pow((epu + 1) as u32).unwrap_or(u128::MAX);
+        let next = (base as u128)
+            .checked_pow((epu + 1) as u32)
+            .unwrap_or(u128::MAX);
         if next <= limit {
             epu += 1;
         } else {
@@ -327,8 +329,7 @@ impl<'de> Visitor<'de> for RadixArrayVisitor {
             }
         };
 
-        RadixArray::new_with_vec(a, b, vals)
-            .map_err(|e| serde::de::Error::custom(e.to_string()))
+        RadixArray::new_with_vec(a, b, vals).map_err(|e| serde::de::Error::custom(e.to_string()))
     }
 }
 

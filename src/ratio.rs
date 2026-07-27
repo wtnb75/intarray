@@ -1,6 +1,6 @@
 use crate::bits::{
-    BitBlock, DEFAULT_K, read_bit, read_biguint, read_elias_gamma, write_bit, write_biguint,
-    write_elias_gamma, zigzag_decode, zigzag_encode,
+    read_biguint, read_bit, read_elias_gamma, write_biguint, write_bit, write_elias_gamma,
+    zigzag_decode, zigzag_encode, BitBlock, DEFAULT_K,
 };
 use crate::error::ArrayError;
 use log::debug;
@@ -38,7 +38,10 @@ pub struct RatioIter<'a> {
 // --- BigUint Elias gamma for denominator (q >= 1) ---
 
 fn write_denom(data: &mut Vec<u8>, bit_len: &mut usize, q: &BigUint) {
-    assert!(!q.is_zero(), "denominator must be >= 1; use Ratio::new, not Ratio::new_raw with zero denom");
+    assert!(
+        !q.is_zero(),
+        "denominator must be >= 1; use Ratio::new, not Ratio::new_raw with zero denom"
+    );
     let k_bits = q.bits() as usize - 1; // floor(log2(q)), defined since q >= 1
     for _ in 0..k_bits {
         write_bit(data, bit_len, 0);
@@ -112,7 +115,11 @@ impl RatioArray {
             return Err(ArrayError::InvalidRange);
         }
         debug!("RatioArray::new k={}", k);
-        Ok(RatioArray { k, blocks: vec![], length: 0 })
+        Ok(RatioArray {
+            k,
+            blocks: vec![],
+            length: 0,
+        })
     }
 
     /// Creates from a `Vec<Ratio<BigInt>>`.
@@ -180,7 +187,10 @@ impl RatioArray {
         Ok(ret)
     }
 
-    pub fn extend(&mut self, vals: impl IntoIterator<Item = Ratio<BigInt>>) -> Result<(), ArrayError> {
+    pub fn extend(
+        &mut self,
+        vals: impl IntoIterator<Item = Ratio<BigInt>>,
+    ) -> Result<(), ArrayError> {
         for v in vals {
             self.push(v)?;
         }
@@ -230,7 +240,10 @@ impl RatioArray {
         if self.length == 0 {
             return None;
         }
-        Some(self.iter().fold(Ratio::from_integer(BigInt::zero()), |acc, v| acc + v))
+        Some(
+            self.iter()
+                .fold(Ratio::from_integer(BigInt::zero()), |acc, v| acc + v),
+        )
     }
 
     pub fn min(&self) -> Option<Ratio<BigInt>> {
@@ -291,7 +304,11 @@ impl PartialEq for RatioArray {
 impl fmt::Display for RatioArray {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "[k={}][{}]=", self.k, self.length)?;
-        let s = self.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",");
+        let s = self
+            .iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
         write!(f, "{}", s)
     }
 }
@@ -315,15 +332,18 @@ impl<'de> Visitor<'de> for RatioArrayVisitor {
     type Value = RatioArray;
 
     fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "a sequence of rational number strings (\"p/q\" or \"p\")")
+        write!(
+            f,
+            "a sequence of rational number strings (\"p/q\" or \"p\")"
+        )
     }
 
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
     where
         A: SeqAccess<'de>,
     {
-        let mut arr = RatioArray::new(DEFAULT_K)
-            .map_err(|e| serde::de::Error::custom(e.to_string()))?;
+        let mut arr =
+            RatioArray::new(DEFAULT_K).map_err(|e| serde::de::Error::custom(e.to_string()))?;
         while let Some(s) = seq.next_element::<String>()? {
             let v = s
                 .parse::<Ratio<BigInt>>()

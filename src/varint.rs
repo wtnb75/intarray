@@ -1,6 +1,6 @@
 use crate::bits::{
-    BitBlock, DEFAULT_K, read_biguint, read_elias_gamma, write_biguint, write_elias_gamma,
-    zigzag_decode, zigzag_encode,
+    read_biguint, read_elias_gamma, write_biguint, write_elias_gamma, zigzag_decode, zigzag_encode,
+    BitBlock, DEFAULT_K,
 };
 use crate::error::ArrayError;
 use log::debug;
@@ -75,7 +75,11 @@ impl VarIntArray {
             return Err(ArrayError::InvalidRange);
         }
         debug!("VarIntArray::new k={}", k);
-        Ok(VarIntArray { k, blocks: vec![], length: 0 })
+        Ok(VarIntArray {
+            k,
+            blocks: vec![],
+            length: 0,
+        })
     }
 
     /// Creates from a `Vec<BigInt>`.
@@ -254,7 +258,11 @@ impl PartialEq for VarIntArray {
 impl fmt::Display for VarIntArray {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "[k={}][{}]=", self.k, self.length)?;
-        let s = self.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",");
+        let s = self
+            .iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
         write!(f, "{}", s)
     }
 }
@@ -285,12 +293,12 @@ impl<'de> Visitor<'de> for VarIntArrayVisitor {
     where
         A: SeqAccess<'de>,
     {
-        let mut arr = VarIntArray::new(DEFAULT_K)
-            .map_err(|e| serde::de::Error::custom(e.to_string()))?;
+        let mut arr =
+            VarIntArray::new(DEFAULT_K).map_err(|e| serde::de::Error::custom(e.to_string()))?;
         while let Some(s) = seq.next_element::<String>()? {
-            let v: BigInt = s
-                .parse()
-                .map_err(|e: num_bigint::ParseBigIntError| serde::de::Error::custom(e.to_string()))?;
+            let v: BigInt = s.parse().map_err(|e: num_bigint::ParseBigIntError| {
+                serde::de::Error::custom(e.to_string())
+            })?;
             arr.push(v)
                 .map_err(|e| serde::de::Error::custom(e.to_string()))?;
         }
