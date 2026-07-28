@@ -1,4 +1,3 @@
-# .github/workflows/update-deps.yml
 name: update-deps
 
 on:
