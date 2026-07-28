@@ -297,8 +297,7 @@ fn empty_stats() {
 
 #[test]
 fn stats_basic() {
-    let arr =
-        VarIntArray::new_with_vec(4, vec![bi(-2), bi(1), bi(3), bi(-1)]).unwrap();
+    let arr = VarIntArray::new_with_vec(4, vec![bi(-2), bi(1), bi(3), bi(-1)]).unwrap();
     assert_eq!(arr.sum().unwrap(), bi(1));
     assert_eq!(arr.min().unwrap(), bi(-2));
     assert_eq!(arr.max().unwrap(), bi(3));
@@ -317,7 +316,11 @@ fn stats_single_element() {
 #[test]
 fn average_large_value_is_finite_or_nan() {
     // 10^400 exceeds f64 max (~1.8×10^308); average should be ±infinity or NaN, not panic
-    let huge: BigInt = std::iter::repeat('9').take(400).collect::<String>().parse().unwrap();
+    let huge: BigInt = std::iter::repeat('9')
+        .take(400)
+        .collect::<String>()
+        .parse()
+        .unwrap();
     let arr = VarIntArray::new_with_vec(64, vec![huge]).unwrap();
     let avg = arr.average().unwrap();
     assert!(avg.is_nan() || avg.is_infinite());

@@ -43,5 +43,4 @@ pub(crate) trait PackedArrayCore {
         }
         Ok(())
     }
-
 }

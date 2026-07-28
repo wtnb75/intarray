@@ -119,7 +119,8 @@ fn encode_decode_22_over_7() {
 fn push_normalizes_fraction() {
     // 2/4 is reduced to 1/2
     let mut arr = RatioArray::new(64).unwrap();
-    arr.push(Ratio::new(BigInt::from(2), BigInt::from(4))).unwrap();
+    arr.push(Ratio::new(BigInt::from(2), BigInt::from(4)))
+        .unwrap();
     assert_eq!(arr.get(0).unwrap(), r(1, 2));
 }
 
@@ -424,12 +425,18 @@ fn get_last_of_non_final_block() {
 
 #[test]
 fn new_with_vec_k_zero() {
-    assert_eq!(RatioArray::new_with_vec(0, vec![ri(1)]), Err(ArrayError::InvalidRange));
+    assert_eq!(
+        RatioArray::new_with_vec(0, vec![ri(1)]),
+        Err(ArrayError::InvalidRange)
+    );
 }
 
 #[test]
 fn new_with_iter_k_zero() {
-    assert_eq!(RatioArray::new_with_iter(0, [ri(1)]), Err(ArrayError::InvalidRange));
+    assert_eq!(
+        RatioArray::new_with_iter(0, [ri(1)]),
+        Err(ArrayError::InvalidRange)
+    );
 }
 
 // --- single-element stats ---
