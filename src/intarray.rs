@@ -1,7 +1,7 @@
 use crate::core::PackedArrayCore;
 use crate::error::ArrayError;
 use log::{debug, error};
-use rand::Rng;
+use rand::RngExt;
 use serde::de::{Deserialize, Deserializer, SeqAccess, Visitor};
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 use std::ops::{AddAssign, MulAssign, Range, SubAssign};
@@ -429,21 +429,21 @@ impl IntArray {
         if self.length == 0 {
             return;
         }
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         if ELEMENT_BITS.is_multiple_of(self.bits) {
             for i in 0..(self.data.len() - 1) {
-                self.data[i] = rng.gen();
+                self.data[i] = rng.random();
             }
         } else {
             let mvbits = ELEMENT_BITS - (ELEMENT_BITS % self.bits);
             let mvval = (1 as Element) << mvbits;
             for i in 0..(self.data.len() - 1) {
-                self.data[i] = rng.gen_range(0..mvval);
+                self.data[i] = rng.random_range(0..mvval);
             }
         }
         let bpd = ELEMENT_BITS / self.bits;
         for i in (self.data.len() - 1) * bpd..self.length {
-            self.set(i, rng.gen_range(0..=self.max_value())).unwrap();
+            self.set(i, rng.random_range(0..=self.max_value())).unwrap();
         }
     }
 

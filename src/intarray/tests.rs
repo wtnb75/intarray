@@ -238,9 +238,9 @@ fn u64test() {
 
 #[test]
 fn sumx() {
-    let mut rng = rand::thread_rng();
-    let bits: usize = rng.gen_range(1..20);
-    let entries: usize = rng.gen_range((1 * 1024 * 1024)..(64 / bits as usize) * 1024 * 1024);
+    let mut rng = rand::rng();
+    let bits: usize = rng.random_range(1..20);
+    let entries: usize = rng.random_range((1 * 1024 * 1024)..(64 / bits as usize) * 1024 * 1024);
     let mut v = IntArray::new(bits, entries);
     let maxv = v.max_value();
     info!(
