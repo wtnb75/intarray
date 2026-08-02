@@ -2,7 +2,7 @@ name: branch
 
 on:
   push:
-    branches-ignore: [master]
+    branches-ignore: [main]
   workflow_dispatch:
 
 permissions:
